@@ -1,0 +1,28 @@
+{
+  "name": "ai_tickets_system",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seifmo202036/AI-TICKET-SYSTEM.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/seifmo202036/AI-TICKET-SYSTEM/issues"
+  },
+  "homepage": "https://github.com/seifmo202036/AI-TICKET-SYSTEM#readme",
+  "dependencies": {
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "express": "^5.2.1"
+  }
+}

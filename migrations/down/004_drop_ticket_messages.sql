@@ -1,0 +1,3 @@
+BEGIN;
+DROP TABLE IF EXISTS ticket_messages;
+COMMIT;
