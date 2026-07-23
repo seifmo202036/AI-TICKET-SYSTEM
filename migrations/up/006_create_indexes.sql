@@ -1,4 +1,4 @@
-BEGIN;
+
 
 CREATE INDEX users_role_status_idx
     ON users (role, account_status);
@@ -30,4 +30,3 @@ CREATE INDEX ticket_messages_ticket_created_idx
 CREATE INDEX ticket_status_history_ticket_created_idx
     ON ticket_status_history (ticket_id, created_at);
 
-COMMIT;

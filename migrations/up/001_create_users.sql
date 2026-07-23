@@ -1,4 +1,4 @@
-BEGIN;
+
 
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -25,4 +25,4 @@ CREATE TABLE users (
         CHECK (char_length(trim(email)) > 0)
 );
 
-COMMIT;
+

@@ -1,4 +1,4 @@
-BEGIN;
+
 
 CREATE TABLE ticket_attachments (
     id BIGSERIAL PRIMARY KEY,
@@ -15,4 +15,4 @@ CREATE TABLE ticket_attachments (
         CHECK (char_length(trim(file_url)) > 0)
 );
 
-COMMIT;
+

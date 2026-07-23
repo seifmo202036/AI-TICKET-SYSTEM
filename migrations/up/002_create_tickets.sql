@@ -1,4 +1,4 @@
-BEGIN;
+
 
 CREATE TABLE tickets (
     id BIGSERIAL PRIMARY KEY,
@@ -80,4 +80,4 @@ CREATE TABLE tickets (
         CHECK (char_length(trim(description)) > 0)
 );
 
-COMMIT;
+

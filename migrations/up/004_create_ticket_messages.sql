@@ -1,4 +1,4 @@
-BEGIN;
+
 
 CREATE TABLE ticket_messages (
     id BIGSERIAL PRIMARY KEY,
@@ -21,4 +21,3 @@ CREATE TABLE ticket_messages (
         CHECK (char_length(trim(body)) > 0)
 );
 
-COMMIT;

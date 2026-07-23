@@ -1,4 +1,4 @@
-BEGIN;
+
 
 CREATE TABLE ticket_status_history (
     id BIGSERIAL PRIMARY KEY,
@@ -28,4 +28,3 @@ CREATE TABLE ticket_status_history (
         CHECK (new_status IN ('triaging', 'open', 'assigned', 'resolved', 'closed'))
 );
 
-COMMIT;
