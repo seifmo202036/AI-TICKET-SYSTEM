@@ -1,6 +1,6 @@
 import express from 'express';
-//import { errorMiddleware } from './middleware/error.middleware.js';
-//import { notFoundMiddleware } from './middleware/not-found.middleware.js';
+import { errorHandler } from './middleware/error.middleware.ts';
+import { notFoundMiddleWare } from './middleware/not-found.middleware.ts';
 
 export const app = express();
 
@@ -9,8 +9,8 @@ app.use(express.json());
 // routes
 
 
-//error handling (returned from any layer below)
 
-
-//app.use(notFoundMiddleware);
-//app.use(errorMiddleware);
+// 404 not found middleware
+app.use(notFoundMiddleWare);
+//error handling 
+app.use(errorHandler);
