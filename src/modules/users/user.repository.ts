@@ -1,4 +1,4 @@
-import { unknown } from 'zod';
+
 import { pool } from '../../db/pool.js';
 import { AppError } from '../../errors/app-error.ts';
 
