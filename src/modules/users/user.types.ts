@@ -23,7 +23,14 @@ export interface PublicRecord  {
     role: UserRole;
     accountStatus: AccountStatus;
     createdAt: Date;
+    accessToken?: string;
+    refreshToken?: string;
 };
+export interface LoginResult {
+  user: PublicRecord;
+  accessToken: string;
+  refreshToken: string;
+}
 
 // data that would be needed for users creation
 export interface CreateUserData {
