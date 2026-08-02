@@ -6,24 +6,25 @@ import {
 import jwt from "jsonwebtoken";
 
 import { env } from "../../config/env.js";
+import type { UserId } from "../users/user.types.js";
 
 
-const TOKEN_ISSUER = "intelligent-support-routing-api";
-const TOKEN_AUDIENCE = "intelligent-support-routing-web";
-export function createAccessToken(userId:number):string {
+const TOKEN_ISSUER = "ai-ticket-system-api";
+const TOKEN_AUDIENCE = "ai-ticket-system-web";
+export function createAccessToken(userId: UserId): string {
   const token: string = jwt.sign(
     {},
     env.JWT_SECRET,
-    { subject: userId.toString(),
+    { subject: userId,
       algorithm: 'HS256',
       issuer: TOKEN_ISSUER,
       audience: TOKEN_AUDIENCE,
-      expiresIn: env.JWT_EXPIRES_IN_MINUTES * 60 },
+      expiresIn: env.ACCESS_TOKEN_EXPIRES_IN_MINUTES * 60 },
   );
   return token;
 }
 
-export function verifyAccessToken(token: string): { userId: number } {
+export function verifyAccessToken(token: string): { userId: UserId } {
 
   const payload = jwt.verify(
     token,
@@ -47,15 +48,15 @@ export function verifyAccessToken(token: string): { userId: number } {
     );
   }
 
-  const userId = Number(payload.sub);
+  const userId = payload.sub;
 
-  if (!Number.isSafeInteger(userId) || userId <= 0) {
+  if (!/^[1-9]\d*$/.test(userId)) {
     throw new jwt.JsonWebTokenError(
       'Token subject is invalid',
     );
   }
 
-  return { userId : userId };
+  return { userId };
 
 };
 
@@ -66,9 +67,10 @@ export function hashRefreshToken (token:string):string{
   return createHash('sha256').update(token).digest("hex");
 }
 
-export function getRefreshTokenExpiration():Date{
+export function getRefreshTokenExpiresAt(): Date {
   return new Date((Date.now())+(env.REFRESH_TOKEN_EXPIRES_IN_DAYS*24 *60*60*1000));
 }
 export const REFRESH_TOKEN_COOKIE_MAX_AGE =
   env.REFRESH_TOKEN_EXPIRES_IN_DAYS*24*60*60 *1000;
-export const ACCESS_TOKEN_COOKIE_MAX_AGE = env.JWT_EXPIRES_IN_MINUTES*60*1000;
+export const ACCESS_TOKEN_COOKIE_MAX_AGE =
+  env.ACCESS_TOKEN_EXPIRES_IN_MINUTES*60*1000;

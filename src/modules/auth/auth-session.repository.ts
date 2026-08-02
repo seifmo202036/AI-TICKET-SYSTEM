@@ -5,9 +5,10 @@ import type {
 import { pool } from "../../db/pool.js";
 
 import type {
-  AuthSessionRecord,
-  CreateAuthSessionData,
-} from "./auth-session.types.js";
+  AuthSession,
+  CreateAuthSessionInput,
+} from './auth-session.types.js';
+import type { UserId } from '../users/user.types.js';
 
 type AuthSessionRow = {
   id: string;
@@ -22,11 +23,11 @@ type AuthSessionRow = {
 
 function mapAuthSessionRow(
   row: AuthSessionRow,
-): AuthSessionRecord {
+): AuthSession {
   return {
     id: row.id,
-    userId: Number(row.user_id), // we used mapper function to convert the user_id from string to number, as the database returns it as a string because it may exceed the range of a 32-bit integer, but our application expects it as a number.
-    tokenHash: row.token_hash,
+    userId: row.user_id,
+    refreshTokenHash: row.token_hash,
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
     replacedBySessionId:
@@ -35,10 +36,10 @@ function mapAuthSessionRow(
   };
 }
 
-export async function createSession(
-  data: CreateAuthSessionData,
+export async function createAuthSession(
+  data: CreateAuthSessionInput,
   client?: PoolClient,
-): Promise<AuthSessionRecord> {
+): Promise<AuthSession> {
   const database = client ?? pool;
 
   const result =
@@ -63,7 +64,7 @@ export async function createSession(
       [
         data.id,
         data.userId,
-        data.tokenHash,
+        data.refreshTokenHash,
         data.expiresAt,
       ],
     );
@@ -72,16 +73,16 @@ export async function createSession(
 
   if (!session) {
     throw new Error(
-      "Failed to create authentication session",
+      "Unable to create an authentication session. Please try signing in again.",
     );
   }
 
   return mapAuthSessionRow(session);
 }
 
-export async function findSessionByTokenHash(
-  tokenHash: string,
-): Promise<AuthSessionRecord | null> {
+export async function findAuthSessionByRefreshTokenHash(
+  refreshTokenHash: string,
+): Promise<AuthSession | null> {
   const result =
     await pool.query<AuthSessionRow>(
       `
@@ -96,7 +97,7 @@ export async function findSessionByTokenHash(
         FROM auth_sessions
         WHERE token_hash = $1
       `,
-      [tokenHash],
+      [refreshTokenHash],
     );
 
   const session = result.rows[0];
@@ -105,10 +106,10 @@ export async function findSessionByTokenHash(
     ? mapAuthSessionRow(session)
     : null;
 }
-export async function findSessionByTokenHashForUpdate(
+export async function findAuthSessionByRefreshTokenHashForUpdate(
   client: PoolClient,
-  tokenHash: string,
-): Promise<AuthSessionRecord | null> {
+  refreshTokenHash: string,
+): Promise<AuthSession | null> {
   const result =
     await client.query<AuthSessionRow>(
       `
@@ -122,9 +123,9 @@ export async function findSessionByTokenHashForUpdate(
           created_at
         FROM auth_sessions
         WHERE token_hash = $1
-        FOR UPDATE     
-      `,  // This locks the selected row for update, preventing other transactions from modifying it until the current transaction is completed used with transactions to ensure data consistency when updating the session record.
-      [tokenHash],
+        FOR UPDATE
+      `,
+      [refreshTokenHash],
     );
 
   const session = result.rows[0];
@@ -135,8 +136,8 @@ export async function findSessionByTokenHashForUpdate(
 }
 
 
-export async function revokeSessionByTokenHash(
-  tokenHash: string,
+export async function revokeAuthSessionByRefreshTokenHash(
+  refreshTokenHash: string,
 ): Promise<void> {
   await pool.query(
     `
@@ -145,12 +146,12 @@ export async function revokeSessionByTokenHash(
       WHERE token_hash = $1
         AND revoked_at IS NULL
     `,
-    [tokenHash],
+    [refreshTokenHash],
   );
 }
 
-export async function revokeAllUserSessions(
-  userId: number,
+export async function revokeAllAuthSessionsForUser(
+  userId: UserId,
 ): Promise<void> {
   await pool.query(
     `
@@ -163,7 +164,7 @@ export async function revokeAllUserSessions(
   );
 }
 
-export async function revokeAndReplaceSession(
+export async function revokeAndReplaceAuthSession(
   client: PoolClient,
   oldSessionId: string,
   replacementSessionId: string,

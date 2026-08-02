@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 const passwordSchema = z
   .string()
-  .min(8, 'Password must contain at least 8 characters')
+  .min(8, 'Password must be at least 8 characters long.')
   .refine(
     (password) => Buffer.byteLength(password, 'utf8') <= 72,
-    'Password is too long',
+    'Password is too long. Please use a shorter password.',
   );
 
 export const signupSchema = z
@@ -13,35 +13,35 @@ export const signupSchema = z
     userName: z
       .string()
       .trim()
-      .min(3, 'Username must contain at least 3 characters')
-      .max(50, 'Username cannot exceed 50 characters')
+      .min(3, 'Username must be at least 3 characters long.')
+      .max(50, 'Username cannot be longer than 50 characters.')
       .regex(
         /^[a-zA-Z0-9_]+$/,
-        'Username may contain letters, numbers, and underscores only',
+        'Username may contain only letters, numbers, and underscores.',
       ),
 
     email: z
       .string()
       .trim()
-      .email('Enter a valid email address')
-      .max(255),
+      .email('Please enter a valid email address.')
+      .max(255, 'Email address cannot be longer than 255 characters.'),
 
     password: passwordSchema,
 
-    accountType: z.enum(['customer', 'agent']),
+    role: z.enum(['customer', 'agent']),
   })
   .strict();
 
-export const signinSchema = z
+export const loginSchema = z
   .object({
     email: z
       .string()
       .trim()
-      .email('Enter a valid email address'),
+      .email('Please enter a valid email address.'),
 
     password: z.string().refine(
     (password) => password.trim().length > 0,
-    'Password is required'
+    'Password is required.'
     )
   })
   .strict(); // rejects properties not in the schema like defining roles
@@ -52,12 +52,12 @@ export const signinSchema = z
 /*
 Without z.infer, you will write
 
-const signinSchema = z.object({
+const loginSchema = z.object({
   email: z.string(),
   password: z.string(),
 });
 
-type SigninInput = {
+type LoginInput = {
   email: string;
   password: string;
 };
@@ -67,4 +67,4 @@ The inferred type helps TypeScript check your code
 while you are writing it.
 */
 export type SignupInput = z.infer<typeof signupSchema>;
-export type SigninInput = z.infer<typeof signinSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;

@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
-import {env} from '../../config/env.ts';
+import { env } from '../../config/env.js';
+import { pool } from '../../db/pool.js';
 
 import { AppError } from '../../errors/app-error.js';
 import { randomUUID } from "node:crypto";
@@ -7,30 +8,36 @@ import { randomUUID } from "node:crypto";
 import {
   createAccessToken,
   createRefreshToken,
-  getRefreshTokenExpiration,
+  getRefreshTokenExpiresAt,
   hashRefreshToken,
-} from "../auth/auth.token.ts";
-import {createSession} from "../auth/auth-session.repository.ts";
+} from './auth.token.js';
+import {
+  createAuthSession,
+  findAuthSessionByRefreshTokenHashForUpdate,
+  revokeAndReplaceAuthSession,
+  revokeAuthSessionByRefreshTokenHash,
+} from './auth-session.repository.js';
 import {
   createUser,
   findUserByEmail,
+  findUserById,
   findUserByUserName,
 } from '../users/user.repository.js';
 
 import type {
   AccountStatus,
-  PublicRecord,
+  PublicUser,
   LoginResult,
   UserRole,
 } from '../users/user.types.js';
 
-import type { SignupInput , SigninInput } from './auth.validation.js';
+import type { LoginInput, SignupInput } from './auth.validation.js';
 
-const PASSWORD_SALT_ROUNDS = env.BCRYPT_ROUNDS;
+const BCRYPT_SALT_ROUNDS = env.BCRYPT_SALT_ROUNDS;
 
 export async function signup(
   input: SignupInput,
-): Promise<PublicRecord> {
+): Promise<PublicUser> {
   // 1. Normalize input
   const normalizedEmail = input.email
     .trim()
@@ -47,7 +54,7 @@ export async function signup(
   if (existingEmailUser) {
     throw new AppError(
       409,
-      'Email is already registered',
+      'An account with this email address already exists.',
       'EMAIL_ALREADY_REGISTERED',
     );
   }
@@ -59,7 +66,7 @@ export async function signup(
   if (existingUserName) {
     throw new AppError(
       409,
-      'Username is already taken',
+      'This username is already taken. Please choose another.',
       'USERNAME_ALREADY_TAKEN',
     );
   }
@@ -67,11 +74,11 @@ export async function signup(
   // 4. Hash password
   const passwordHash = await bcrypt.hash(
     input.password,
-    PASSWORD_SALT_ROUNDS,
+    BCRYPT_SALT_ROUNDS,
   );
 
   // 5. Determine role
-  const role: UserRole = input.accountType;
+  const role: UserRole = input.role;
 
   // 6. Determine account status
   const accountStatus: AccountStatus =
@@ -93,7 +100,7 @@ export async function signup(
 }
 
 export async function login(
-  input: SigninInput,
+  input: LoginInput,
 ): Promise<LoginResult> {
   const normalizedEmail = input.email
     .trim()
@@ -106,7 +113,7 @@ export async function login(
   if (!user) {
     throw new AppError(
       401,
-      "Invalid email or password",
+      "The email address or password is incorrect.",
       "INVALID_CREDENTIALS",
     );
   }
@@ -121,7 +128,7 @@ export async function login(
   if (!passwordMatches) {
     throw new AppError(
       401,
-      "Invalid email or password",
+      "The email address or password is incorrect.",
       "INVALID_CREDENTIALS",
     );
   }
@@ -130,7 +137,7 @@ export async function login(
   if (user.account_status === "pending") {
     throw new AppError(
       403,
-      "Account is pending approval",
+      "Your account is awaiting approval.",
       "ACCOUNT_PENDING",
     );
   }
@@ -138,7 +145,7 @@ export async function login(
   if (user.account_status === "suspended") {
     throw new AppError(
       403,
-      "Account is suspended",
+      "Your account has been suspended.",
       "ACCOUNT_SUSPENDED",
     );
   }
@@ -146,7 +153,7 @@ export async function login(
   if (user.account_status !== "active") {
     throw new AppError(
       403,
-      "Account is not active",
+      "Your account is not active.",
       "ACCOUNT_NOT_ACTIVE",
     );
   }
@@ -162,18 +169,18 @@ export async function login(
     hashRefreshToken(refreshToken);
 
   // 5. Store refresh session
-  await createSession({
+  await createAuthSession({
     id: randomUUID(),
     userId: user.id,
-    tokenHash: refreshTokenHash,
+    refreshTokenHash,
     expiresAt:
-      getRefreshTokenExpiration(),
+      getRefreshTokenExpiresAt(),
   });
 
   // 6. Return result
   return {
     user: {
-      id: user.id.toString(),
+      id: user.id,
       userName: user.user_name,
       email: user.email,
       role: user.role,
@@ -184,4 +191,134 @@ export async function login(
     accessToken,
     refreshToken,
   };
+}
+
+export async function refreshAuthentication(
+  currentRefreshToken: string,
+): Promise<{
+  accessToken: string;
+  refreshToken: string;
+}> {
+  const currentRefreshTokenHash =
+    hashRefreshToken(currentRefreshToken);
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const currentSession =
+      await findAuthSessionByRefreshTokenHashForUpdate(
+        client,
+        currentRefreshTokenHash,
+      );
+
+    if (!currentSession) {
+      throw new AppError(
+        401,
+        'The refresh token is invalid. Please sign in again.',
+        'INVALID_REFRESH_TOKEN',
+      );
+    }
+
+    if (currentSession.revokedAt) {
+      throw new AppError(
+        401,
+        'This refresh token has already been used or revoked. Please sign in again.',
+        'REFRESH_TOKEN_REVOKED',
+      );
+    }
+
+    if (currentSession.expiresAt.getTime() <= Date.now()) {
+      throw new AppError(
+        401,
+        'The refresh token has expired. Please sign in again.',
+        'REFRESH_TOKEN_EXPIRED',
+      );
+    }
+
+    const currentUser = await findUserById(
+      currentSession.userId,
+      client,
+    );
+
+    if (!currentUser) {
+      throw new AppError(
+        401,
+        'The authenticated user no longer exists. Please sign in again.',
+        'INVALID_AUTHENTICATION',
+      );
+    }
+
+    if (currentUser.accountStatus === 'suspended') {
+      throw new AppError(
+        403,
+        'Your account has been suspended.',
+        'ACCOUNT_SUSPENDED',
+      );
+    }
+
+    if (currentUser.accountStatus !== 'active') {
+      throw new AppError(
+        403,
+        'Your account is not active.',
+        'ACCOUNT_NOT_ACTIVE',
+      );
+    }
+
+    const newAccessToken = createAccessToken(
+      currentUser.id,
+    );
+    const newRefreshToken = createRefreshToken();
+    const newRefreshTokenHash =
+      hashRefreshToken(newRefreshToken);
+    const newSessionId = randomUUID();
+
+    await createAuthSession(
+      {
+        id: newSessionId,
+        userId: currentUser.id,
+        refreshTokenHash: newRefreshTokenHash,
+        expiresAt: getRefreshTokenExpiresAt(),
+      },
+      client,
+    );
+
+    await revokeAndReplaceAuthSession(
+      client,
+      currentSession.id,
+      newSessionId,
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error(
+        'Failed to roll back refresh-token rotation:',
+        rollbackError,
+      );
+    }
+
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function logout(
+  refreshToken: string,
+): Promise<void> {
+  const refreshTokenHash =
+    hashRefreshToken(refreshToken);
+
+  await revokeAuthSessionByRefreshTokenHash(
+    refreshTokenHash,
+  );
 }

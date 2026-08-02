@@ -1,4 +1,4 @@
-import { app } from './app.ts';
+import { app } from './app.js';
 import { env } from './config/env.js';
 import { verifyDatabaseConnection } from './db/pool.js';
 

@@ -1,5 +1,5 @@
 import {Pool} from 'pg';
-import {env} from '../config/env.ts';
+import { env } from '../config/env.js';
 
 // cretate connection pool for repository
 export const pool = new Pool({

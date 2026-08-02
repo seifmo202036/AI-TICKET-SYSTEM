@@ -1,11 +1,12 @@
 export type UserRole = 'admin' | 'customer' | 'agent'  ;
-export type SignupAccountType = 'customer' | 'agent';
+export type SignupRole = 'customer' | 'agent';
+export type UserId = string;
 
 export type AccountStatus = 'pending' | 'active' | 'suspended';
 
 // data that would be written to DB
-export interface UserRecord  {
-    id:number,
+export interface DbUser  {
+    id: UserId,
     user_name:string,
     email:string,
     password_hash:string,
@@ -16,28 +17,26 @@ export interface UserRecord  {
 };
 
 // data that would be displayed to users
-export interface PublicRecord  {
-    id: string;
+export interface PublicUser  {
+    id: UserId;
     userName: string;
     email: string;
     role: UserRole;
     accountStatus: AccountStatus;
     createdAt: Date;
-    accessToken?: string;
-    refreshToken?: string;
 };
 export interface LoginResult {
-  user: PublicRecord;
+  user: PublicUser;
   accessToken: string;
   refreshToken: string;
 }
 
 // data that would be needed for users creation
-export interface CreateUserData {
+export interface CreateUserInput {
     userName: string;
     email: string;
     passwordHash: string;
-    role: SignupAccountType;
+    role: SignupRole;
     accountStatus: AccountStatus;
 };
 

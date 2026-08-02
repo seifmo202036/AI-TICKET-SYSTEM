@@ -1,7 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
 
-import { AppError } from '../errors/app-error.ts';
-import { env } from '../config/env.ts';
+import { AppError } from '../errors/app-error.js';
+import { env } from '../config/env.js';
 
 export const errorHandler: ErrorRequestHandler = (err,_req,res,next)=> {
   // Let Express handle it if the response already started.
@@ -21,7 +21,7 @@ export const errorHandler: ErrorRequestHandler = (err,_req,res,next)=> {
     console.error(err);
 
     res.status(statusCode).json({
-      message: err instanceof Error ? err.message : 'Unknown error',
+      message: err instanceof Error ? err.message : 'An unexpected error occurred while processing your request.',
       code,
       stack: err instanceof Error ? err.stack : undefined,
       cause: err instanceof Error ? err.cause : undefined,
@@ -33,7 +33,7 @@ export const errorHandler: ErrorRequestHandler = (err,_req,res,next)=> {
   res.status(statusCode).json({
     message: isAppError
       ? err.message
-      : 'Internal server error',
+      : 'An unexpected server error occurred. Please try again later.',
     code,
   });
 };

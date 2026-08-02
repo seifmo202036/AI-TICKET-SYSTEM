@@ -1,27 +1,29 @@
 
 import { pool } from '../../db/pool.js';
-import { AppError } from '../../errors/app-error.ts';
+import { AppError } from '../../errors/app-error.js';
+import type { PoolClient } from 'pg';
 
-interface PublicUserRow {
+interface DbUserRow {
   id: string;
   user_name: string;
   email: string;
-  role: PublicRecord['role'];
-  account_status: PublicRecord['accountStatus'];
+  role: PublicUser['role'];
+  account_status: PublicUser['accountStatus'];
   created_at: Date;
 }
 
 import type {
-  CreateUserData,
-  PublicRecord,
-  UserRecord,
-} from './user.types.ts';
+  CreateUserInput,
+  DbUser,
+  PublicUser,
+  UserId,
+} from './user.types.js';
 
 export async function findUserByEmail(
     email: string,
-): Promise<UserRecord | null> {
+): Promise<DbUser | null> {
     try {
-    const result = await pool.query<UserRecord>(
+    const result = await pool.query<DbUser>(
     `
         SELECT
             id,
@@ -43,14 +45,14 @@ export async function findUserByEmail(
   } catch (error) {
     throw new AppError(
       500,
-      'Failed to retrieve user',
+      'Unable to retrieve the user by email. Please try again later.',
       'DATABASE_QUERY_FAILED',
     );
   }
 }
 
-export async function findUserByUserName(userName:string):Promise<UserRecord|null>{
-    try{const result = await pool.query<UserRecord>(
+export async function findUserByUserName(userName:string):Promise<DbUser|null>{
+    try{const result = await pool.query<DbUser>(
         `SELECT
         id,
         user_name,
@@ -69,7 +71,7 @@ export async function findUserByUserName(userName:string):Promise<UserRecord|nul
     catch(error){
         throw new AppError(
         500,
-        'Failed to retrieve user',
+        'Unable to retrieve the user by username. Please try again later.',
         'DATABASE_QUERY_FAILED',
     );
     }
@@ -78,11 +80,14 @@ export async function findUserByUserName(userName:string):Promise<UserRecord|nul
 
 
 
-export async function findPublicUserById(
-  id: string,
-): Promise<PublicRecord | null> {
+export async function findUserById(
+  userId: UserId,
+  client?: PoolClient,
+): Promise<PublicUser | null> {
   try {
-    const result = await pool.query<PublicUserRow>(
+    const database = client ?? pool;
+
+    const result = await database.query<DbUserRow>(
       `
         SELECT
           id,
@@ -95,7 +100,7 @@ export async function findPublicUserById(
         WHERE id = $1
         LIMIT 1
       `,
-      [id],
+      [userId],
     );
 
     const row = result.rows[0];
@@ -115,26 +120,17 @@ export async function findPublicUserById(
   } catch (error) {
     throw new AppError(
       500,
-      'Failed to retrieve user',
+      'Unable to retrieve the user profile. Please try again later.',
       'DATABASE_QUERY_FAILED',
     );
   }
 }
 
-interface CreatedUserRow {
-  id: string;
-  user_name: string;
-  email: string;
-  role: PublicRecord['role'];
-  account_status: PublicRecord['accountStatus'];
-  created_at: Date;
-}
-
 export async function createUser(
-    data: CreateUserData,
-): Promise<PublicRecord> {
+    data: CreateUserInput,
+): Promise<PublicUser> {
     try {
-    const result = await pool.query<CreatedUserRow>(
+    const result = await pool.query<DbUserRow>(
     `
         INSERT INTO users (
             user_name,
@@ -166,7 +162,7 @@ export async function createUser(
     if (!row) {
         throw new AppError(
         500,
-        'User creation did not return a user',
+        'The account could not be created because no user record was returned.',
         'USER_CREATION_FAILED',
         );
     }
@@ -186,7 +182,7 @@ export async function createUser(
 
     throw new AppError(
         500,
-        'Failed to create user',
+        'Unable to create the user account. Please try again later.',
         'DATABASE_QUERY_FAILED',
     );
     }

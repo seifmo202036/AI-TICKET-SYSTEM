@@ -1,7 +1,9 @@
-export type AuthSessionRecord = {
+import type { UserId } from '../users/user.types.js';
+
+export type AuthSession = {
   id: string;
-  userId: number;
-  tokenHash: string;
+  userId: UserId;
+  refreshTokenHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
   replacedBySessionId: string | null;
@@ -9,9 +11,9 @@ export type AuthSessionRecord = {
 };
 
 
-export type CreateAuthSessionData = {
+export type CreateAuthSessionInput = {
   id: string;
-  userId: number;
-  tokenHash: string;
+  userId: UserId;
+  refreshTokenHash: string;
   expiresAt: Date;
 };

@@ -20,7 +20,7 @@ const envSchema = z.object({
     .string()
     .min(32, 'JWT_SECRET must be at least 32 characters long'),
 
-  JWT_EXPIRES_IN_MINUTES: z.coerce
+  ACCESS_TOKEN_EXPIRES_IN_MINUTES: z.coerce
     .number()
     .int()
     .positive()
@@ -39,7 +39,7 @@ const envSchema = z.object({
     .url()
     .default('http://localhost:5173'),
 
-  BCRYPT_ROUNDS: z.coerce
+  BCRYPT_SALT_ROUNDS: z.coerce
     .number()
     .int()
     .min(10)
@@ -53,7 +53,7 @@ if(!result.success){
     .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
     .join('\n');
 
-  throw new Error(`Invalid environment configuration:\n${messages}`);
+  throw new Error(`Environment configuration is invalid:\n${messages}`);
 }
 
 export const env = result.data;
