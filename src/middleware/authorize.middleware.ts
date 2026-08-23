@@ -1,9 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import { AppError } from '../errors/app-error.js';
-import type {
-  UserRole,
-} from '../modules/users/user.types.js';
+import type { UserRole } from '../modules/users/user.types.js';
 
 export function authorizeMiddleware(
   ...allowedRoles: UserRole[]

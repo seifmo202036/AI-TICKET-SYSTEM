@@ -4,8 +4,7 @@ import { verifyDatabaseConnection } from './db/pool.js';
 
 async function startServer(): Promise<void> {
   try {
-     await verifyDatabaseConnection();
-   
+    await verifyDatabaseConnection();
 
     console.log('Database connection established');
 
@@ -18,4 +17,4 @@ async function startServer(): Promise<void> {
   }
 }
 
-void startServer(); // returned promise inentionally ignored
+void startServer(); // returned promise intentionally ignored

@@ -2,26 +2,17 @@ import type { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 
 import { AppError } from '../errors/app-error.js';
-import {
-  ACCESS_TOKEN_COOKIE,
-} from '../modules/auth/auth.cookie.js';
-import {
-  verifyAccessToken,
-} from '../modules/auth/auth.token.js';
-import {
-  findUserById,
-} from '../modules/users/user.repository.js';
-import type {
-  UserId,
-} from '../modules/users/user.types.js';
+import { ACCESS_TOKEN_COOKIE } from '../modules/auth/auth.cookie.js';
+import { verifyAccessToken } from '../modules/auth/auth.token.js';
+import { findUserById } from '../modules/users/user.repository.js';
+import type { UserId } from '../modules/users/user.types.js';
 
 export const authenticateMiddleware: RequestHandler = async (
   request,
   response,
   next,
 ): Promise<void> => {
-  const accessToken: unknown =
-    request.cookies?.[ACCESS_TOKEN_COOKIE];
+  const accessToken: unknown = request.cookies?.[ACCESS_TOKEN_COOKIE];
 
   if (typeof accessToken !== 'string' || !accessToken) {
     next(
@@ -87,11 +78,7 @@ export const authenticateMiddleware: RequestHandler = async (
 
     if (currentUser.accountStatus !== 'active') {
       next(
-        new AppError(
-          403,
-          'Your account is not active.',
-          'ACCOUNT_NOT_ACTIVE',
-        ),
+        new AppError(403, 'Your account is not active.', 'ACCOUNT_NOT_ACTIVE'),
       );
       return;
     }

@@ -8,46 +8,39 @@ import {
   refreshController,
   signupController,
 } from './auth.controller.js';
+import { authenticateMiddleware } from '../../middleware/authenticate.middleware.js';
+import { authorizeMiddleware } from '../../middleware/authorize.middleware.js';
+import { validateBodyMiddleware } from '../../middleware/validate-body.middleware.js';
+import { loginSchema, signupSchema } from './auth.validation.js';
 import {
-  authenticateMiddleware,
-} from '../../middleware/authenticate.middleware.js';
-import {
-  authorizeMiddleware,
-} from '../../middleware/authorize.middleware.js';
-import {
-  validateBodyMiddleware,
-} from './validate-body.middleware.js';
-import {
-  loginSchema,
-  signupSchema,
-} from './auth.validation.js';
+  authGeneralRateLimiter,
+  loginRateLimiter,
+  refreshRateLimiter,
+  signupRateLimiter,
+} from '../../middleware/rate-limit.middleware.js';
 
 export const authRouter = Router();
 
+authRouter.use(authGeneralRateLimiter);
+
 authRouter.post(
   '/signup',
+  signupRateLimiter,
   validateBodyMiddleware(signupSchema),
   signupController,
 );
-authRouter.post('/login',
+authRouter.post(
+  '/login',
+  loginRateLimiter,
   validateBodyMiddleware(loginSchema),
-  loginController);
-
-authRouter.get(
-  '/me',
-  authenticateMiddleware,
-  getCurrentUserController,
+  loginController,
 );
 
-authRouter.post(
-  '/refresh',
-  refreshController,
-);
+authRouter.get('/me', authenticateMiddleware, getCurrentUserController);
 
-authRouter.post(
-  '/logout',
-  logoutController,
-);
+authRouter.post('/refresh', refreshRateLimiter, refreshController);
+
+authRouter.post('/logout', logoutController);
 
 if (env.NODE_ENV === 'test') {
   authRouter.get(

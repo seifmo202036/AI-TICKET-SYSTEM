@@ -34,21 +34,18 @@ export const signupSchema = z
 
 export const loginSchema = z
   .object({
-    email: z
-      .string()
-      .trim()
-      .email('Please enter a valid email address.'),
+    email: z.string().trim().email('Please enter a valid email address.'),
 
-    password: z.string().refine(
-    (password) => password.trim().length > 0,
-    'Password is required.'
-    )
+    password: z
+      .string()
+      .refine(
+        (password) => password.trim().length > 0,
+        'Password is required.',
+      ),
   })
   .strict(); // rejects properties not in the schema like defining roles
 
-
-
-//extract the TypeScript data type from it to use it later 
+//extract the TypeScript data type from it to use it later
 /*
 Without z.infer, you will write
 

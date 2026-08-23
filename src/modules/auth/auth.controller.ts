@@ -1,13 +1,6 @@
-import type {
-  NextFunction,
-  Request,
-  Response,
-} from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
-import {
-  loginSchema,
-  signupSchema,
-} from './auth.validation.js';
+import { loginSchema, signupSchema } from './auth.validation.js';
 import {
   login,
   logout,
@@ -15,9 +8,7 @@ import {
   signup,
 } from './auth.service.js';
 import { AppError } from '../../errors/app-error.js';
-import type {
-  PublicUser,
-} from '../users/user.types.js';
+import type { PublicUser } from '../users/user.types.js';
 
 import {
   clearAuthCookies,
@@ -31,9 +22,7 @@ export async function signupController(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const input = signupSchema.parse(
-      request.body,
-    );
+    const input = signupSchema.parse(request.body);
 
     const user = await signup(input);
 
@@ -56,11 +45,7 @@ export async function loginController(
     const input = loginSchema.parse(req.body);
     const result = await login(input);
 
-    setAuthCookies(
-      res,
-      result.accessToken,
-      result.refreshToken,
-    );
+    setAuthCookies(res, result.accessToken, result.refreshToken);
 
     res.status(200).json({
       message: 'Login successful.',
@@ -76,8 +61,7 @@ export function getCurrentUserController(
   response: Response,
   next: NextFunction,
 ): void {
-  const currentUser =
-    response.locals.currentUser as PublicUser | undefined;
+  const currentUser = response.locals.currentUser as PublicUser | undefined;
 
   if (!currentUser) {
     next(
@@ -100,8 +84,7 @@ export async function refreshController(
   response: Response,
   next: NextFunction,
 ): Promise<void> {
-  const refreshToken: unknown =
-    request.cookies?.[REFRESH_TOKEN_COOKIE];
+  const refreshToken: unknown = request.cookies?.[REFRESH_TOKEN_COOKIE];
 
   if (typeof refreshToken !== 'string' || !refreshToken) {
     next(
@@ -115,15 +98,9 @@ export async function refreshController(
   }
 
   try {
-    const result = await refreshAuthentication(
-      refreshToken,
-    );
+    const result = await refreshAuthentication(refreshToken);
 
-    setAuthCookies(
-      response,
-      result.accessToken,
-      result.refreshToken,
-    );
+    setAuthCookies(response, result.accessToken, result.refreshToken);
 
     response.status(200).json({
       message: 'Authentication refreshed successfully.',
@@ -138,8 +115,7 @@ export async function logoutController(
   response: Response,
   next: NextFunction,
 ): Promise<void> {
-  const refreshToken: unknown =
-    request.cookies?.[REFRESH_TOKEN_COOKIE];
+  const refreshToken: unknown = request.cookies?.[REFRESH_TOKEN_COOKIE];
 
   try {
     if (typeof refreshToken === 'string' && refreshToken) {

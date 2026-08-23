@@ -20,12 +20,12 @@ const databasePool = new Pool({
 });
 
 const createdUserIds = [];
-const testSuffix =
-  `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+const testSuffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 let applicationProcess;
 let applicationOutput = '';
 let apiBaseUrl;
+let usersApiBaseUrl;
 
 function delay(milliseconds) {
   return new Promise((resolve) => {
@@ -64,11 +64,7 @@ function getAvailablePort() {
 function startApplication(port) {
   applicationProcess = spawn(
     process.execPath,
-    [
-      '--import',
-      'tsx',
-      'src/server.ts',
-    ],
+    ['--import', 'tsx', 'src/server.ts'],
     {
       cwd: process.cwd(),
       env: {
@@ -132,9 +128,7 @@ function getSetCookieHeaders(response) {
     return [];
   }
 
-  return combinedHeader.split(
-    /,(?=\s*[A-Za-z0-9_-]+=)/,
-  );
+  return combinedHeader.split(/,(?=\s*[A-Za-z0-9_-]+=)/);
 }
 
 function findCookieHeader(headers, cookieName) {
@@ -160,9 +154,7 @@ function getCookieValue(cookiePair) {
 }
 
 function hashRefreshToken(refreshToken) {
-  return createHash('sha256')
-    .update(refreshToken)
-    .digest('hex');
+  return createHash('sha256').update(refreshToken).digest('hex');
 }
 
 function assertCookieOptions(cookieHeader, expectedPath) {
@@ -195,12 +187,14 @@ async function apiRequest(path, options = {}) {
   });
 }
 
-async function createTestUser(
-  label,
-  role,
-  accountStatus,
-  passwordHash,
-) {
+async function userApiRequest(path, options = {}) {
+  return fetch(`${usersApiBaseUrl}${path}`, {
+    redirect: 'manual',
+    ...options,
+  });
+}
+
+async function createTestUser(label, role, accountStatus, passwordHash) {
   const userName = `${label}_${testSuffix}`;
   const email = `${userName}@example.com`;
 
@@ -222,13 +216,7 @@ async function createTestUser(
         account_status,
         created_at
     `,
-    [
-      userName,
-      email,
-      passwordHash,
-      role,
-      accountStatus,
-    ],
+    [userName, email, passwordHash, role, accountStatus],
   );
 
   const user = result.rows[0];
@@ -256,36 +244,27 @@ async function loginSuccessfully(user) {
   const body = await response.json();
 
   assert.equal(body.user.id, user.id);
-  assert.deepEqual(
-    Object.keys(body.user).sort(),
-    [
-      'accountStatus',
-      'createdAt',
-      'email',
-      'id',
-      'role',
-      'userName',
-    ],
-  );
+  assert.deepEqual(Object.keys(body.user).sort(), [
+    'accountStatus',
+    'createdAt',
+    'email',
+    'id',
+    'role',
+    'userName',
+  ]);
   assert.equal('password_hash' in body.user, false);
   assert.equal('accessToken' in body, false);
   assert.equal('refreshToken' in body, false);
 
   const setCookieHeaders = getSetCookieHeaders(response);
-  const accessCookieHeader = findCookieHeader(
-    setCookieHeaders,
-    'accessToken',
-  );
+  const accessCookieHeader = findCookieHeader(setCookieHeaders, 'accessToken');
   const refreshCookieHeader = findCookieHeader(
     setCookieHeaders,
     'refreshToken',
   );
 
   assertCookieOptions(accessCookieHeader, '/api');
-  assertCookieOptions(
-    refreshCookieHeader,
-    '/api/v1/auth',
-  );
+  assertCookieOptions(refreshCookieHeader, '/api/v1/auth');
   assert.equal(
     /;\s*Max-Age=/i.test(accessCookieHeader),
     true,
@@ -303,11 +282,7 @@ async function loginSuccessfully(user) {
   };
 }
 
-async function expectApiError(
-  response,
-  expectedStatus,
-  expectedCode,
-) {
+async function expectApiError(response, expectedStatus, expectedCode) {
   assert.equal(response.status, expectedStatus);
 
   const body = await response.json();
@@ -335,10 +310,7 @@ async function run() {
 
   await databasePool.query('SELECT 1');
 
-  const passwordHash = await bcrypt.hash(
-    TEST_PASSWORD,
-    10,
-  );
+  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
 
   const users = {
     customer: await createTestUser(
@@ -347,12 +319,7 @@ async function run() {
       'active',
       passwordHash,
     ),
-    pending: await createTestUser(
-      'pending',
-      'agent',
-      'pending',
-      passwordHash,
-    ),
+    pending: await createTestUser('pending', 'agent', 'pending', passwordHash),
     suspendedLogin: await createTestUser(
       'suspended_login',
       'customer',
@@ -371,18 +338,8 @@ async function run() {
       'active',
       passwordHash,
     ),
-    agent: await createTestUser(
-      'agent',
-      'agent',
-      'active',
-      passwordHash,
-    ),
-    admin: await createTestUser(
-      'admin',
-      'admin',
-      'active',
-      passwordHash,
-    ),
+    agent: await createTestUser('agent', 'agent', 'active', passwordHash),
+    admin: await createTestUser('admin', 'admin', 'active', passwordHash),
     rotation: await createTestUser(
       'rotation',
       'customer',
@@ -413,8 +370,15 @@ async function run() {
       'active',
       passwordHash,
     ),
-    logout: await createTestUser(
-      'logout',
+    logout: await createTestUser('logout', 'customer', 'active', passwordHash),
+    suspendTarget: await createTestUser(
+      'suspend_target',
+      'customer',
+      'active',
+      passwordHash,
+    ),
+    reinstateTarget: await createTestUser(
+      'reinstate_target',
       'customer',
       'active',
       passwordHash,
@@ -422,7 +386,9 @@ async function run() {
   };
 
   const port = await getAvailablePort();
-  apiBaseUrl = `http://127.0.0.1:${port}/api/v1/auth`;
+  const serverRootUrl = `http://127.0.0.1:${port}`;
+  apiBaseUrl = `${serverRootUrl}/api/v1/auth`;
+  usersApiBaseUrl = `${serverRootUrl}/api/v1/users`;
   startApplication(port);
   await waitForApplication();
 
@@ -455,11 +421,7 @@ async function run() {
         password: 'WrongPassword123!',
       }),
     });
-    await expectApiError(
-      wrongPasswordResponse,
-      401,
-      'INVALID_CREDENTIALS',
-    );
+    await expectApiError(wrongPasswordResponse, 401, 'INVALID_CREDENTIALS');
 
     const unknownEmailResponse = await apiRequest('/login', {
       method: 'POST',
@@ -469,11 +431,7 @@ async function run() {
         password: TEST_PASSWORD,
       }),
     });
-    await expectApiError(
-      unknownEmailResponse,
-      401,
-      'INVALID_CREDENTIALS',
-    );
+    await expectApiError(unknownEmailResponse, 401, 'INVALID_CREDENTIALS');
 
     const pendingResponse = await apiRequest('/login', {
       method: 'POST',
@@ -483,11 +441,7 @@ async function run() {
         password: TEST_PASSWORD,
       }),
     });
-    await expectApiError(
-      pendingResponse,
-      403,
-      'ACCOUNT_PENDING',
-    );
+    await expectApiError(pendingResponse, 403, 'ACCOUNT_PENDING');
 
     const suspendedResponse = await apiRequest('/login', {
       method: 'POST',
@@ -497,10 +451,52 @@ async function run() {
         password: TEST_PASSWORD,
       }),
     });
-    await expectApiError(
-      suspendedResponse,
-      403,
-      'ACCOUNT_SUSPENDED',
+    await expectApiError(suspendedResponse, 403, 'ACCOUNT_SUSPENDED');
+  });
+
+  await runScenario('concurrent signup uniqueness', async () => {
+    const userName = `race_${testSuffix}`;
+    const email = `${userName}@example.com`;
+    const signupPayload = {
+      userName,
+      email,
+      password: TEST_PASSWORD,
+      role: 'customer',
+    };
+
+    const signupRequest = () =>
+      apiRequest('/signup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(signupPayload),
+      });
+
+    const responses = await Promise.all([signupRequest(), signupRequest()]);
+
+    await databasePool.query(
+      `
+        DELETE FROM users
+        WHERE email = $1
+      `,
+      [email],
+    );
+
+    const statuses = responses
+      .map((response) => response.status)
+      .sort((left, right) => left - right);
+
+    assert.deepEqual(statuses, [201, 409]);
+
+    const conflictResponse = responses.find(
+      (response) => response.status === 409,
+    );
+    const conflictBody = await conflictResponse.json();
+    assert.equal(
+      ['EMAIL_ALREADY_REGISTERED', 'USERNAME_ALREADY_TAKEN'].includes(
+        conflictBody.code,
+      ),
+      true,
+      'Expected a uniqueness conflict error code.',
     );
   });
 
@@ -517,48 +513,30 @@ async function run() {
     assert.equal('password_hash' in body.user, false);
 
     const missingCookieResponse = await apiRequest('/me');
-    await expectApiError(
-      missingCookieResponse,
-      401,
-      'AUTHENTICATION_REQUIRED',
-    );
+    await expectApiError(missingCookieResponse, 401, 'AUTHENTICATION_REQUIRED');
 
     const invalidTokenResponse = await apiRequest('/me', {
       headers: {
         cookie: 'accessToken=invalid-token',
       },
     });
-    await expectApiError(
-      invalidTokenResponse,
-      401,
-      'INVALID_ACCESS_TOKEN',
-    );
+    await expectApiError(invalidTokenResponse, 401, 'INVALID_ACCESS_TOKEN');
 
-    const expiredAccessToken = jwt.sign(
-      {},
-      process.env.JWT_SECRET,
-      {
-        subject: users.customer.id,
-        algorithm: 'HS256',
-        issuer: TOKEN_ISSUER,
-        audience: TOKEN_AUDIENCE,
-        expiresIn: -1,
-      },
-    );
+    const expiredAccessToken = jwt.sign({}, process.env.JWT_SECRET, {
+      subject: users.customer.id,
+      algorithm: 'HS256',
+      issuer: TOKEN_ISSUER,
+      audience: TOKEN_AUDIENCE,
+      expiresIn: -1,
+    });
     const expiredTokenResponse = await apiRequest('/me', {
       headers: {
         cookie: `accessToken=${expiredAccessToken}`,
       },
     });
-    await expectApiError(
-      expiredTokenResponse,
-      401,
-      'ACCESS_TOKEN_EXPIRED',
-    );
+    await expectApiError(expiredTokenResponse, 401, 'ACCESS_TOKEN_EXPIRED');
 
-    const suspendedCookies = await loginSuccessfully(
-      users.suspendedAccess,
-    );
+    const suspendedCookies = await loginSuccessfully(users.suspendedAccess);
     await databasePool.query(
       `
         UPDATE users
@@ -572,15 +550,9 @@ async function run() {
         cookie: suspendedCookies.accessCookie,
       },
     });
-    await expectApiError(
-      suspendedAccessResponse,
-      403,
-      'ACCOUNT_SUSPENDED',
-    );
+    await expectApiError(suspendedAccessResponse, 403, 'ACCOUNT_SUSPENDED');
 
-    const deletedCookies = await loginSuccessfully(
-      users.deletedAccess,
-    );
+    const deletedCookies = await loginSuccessfully(users.deletedAccess);
     await databasePool.query(
       `
         DELETE FROM users
@@ -593,27 +565,16 @@ async function run() {
         cookie: deletedCookies.accessCookie,
       },
     });
-    await expectApiError(
-      deletedUserResponse,
-      401,
-      'INVALID_AUTHENTICATION',
-    );
+    await expectApiError(deletedUserResponse, 401, 'INVALID_AUTHENTICATION');
   });
 
   await runScenario('role authorization', async () => {
-    const customerResponse = await apiRequest(
-      '/test/agent-only',
-      {
-        headers: {
-          cookie: customerCookies.accessCookie,
-        },
+    const customerResponse = await apiRequest('/test/agent-only', {
+      headers: {
+        cookie: customerCookies.accessCookie,
       },
-    );
-    await expectApiError(
-      customerResponse,
-      403,
-      'FORBIDDEN',
-    );
+    });
+    await expectApiError(customerResponse, 403, 'FORBIDDEN');
 
     const agentCookies = await loginSuccessfully(users.agent);
     const agentResponse = await apiRequest('/test/agent-only', {
@@ -634,11 +595,8 @@ async function run() {
 
   await runScenario('refresh-token rotation and reuse rejection', async () => {
     const oldCookies = await loginSuccessfully(users.rotation);
-    const oldRefreshToken = getCookieValue(
-      oldCookies.refreshCookie,
-    );
-    const oldRefreshTokenHash =
-      hashRefreshToken(oldRefreshToken);
+    const oldRefreshToken = getCookieValue(oldCookies.refreshCookie);
+    const oldRefreshTokenHash = hashRefreshToken(oldRefreshToken);
 
     const refreshResponse = await apiRequest('/refresh', {
       method: 'POST',
@@ -652,8 +610,7 @@ async function run() {
     assert.equal('accessToken' in refreshBody, false);
     assert.equal('refreshToken' in refreshBody, false);
 
-    const newSetCookieHeaders =
-      getSetCookieHeaders(refreshResponse);
+    const newSetCookieHeaders = getSetCookieHeaders(refreshResponse);
     const newAccessCookieHeader = findCookieHeader(
       newSetCookieHeaders,
       'accessToken',
@@ -667,10 +624,7 @@ async function run() {
     );
 
     assertCookieOptions(newAccessCookieHeader, '/api');
-    assertCookieOptions(
-      newRefreshCookieHeader,
-      '/api/v1/auth',
-    );
+    assertCookieOptions(newRefreshCookieHeader, '/api/v1/auth');
     assert.equal(
       newRefreshToken !== oldRefreshToken,
       true,
@@ -712,26 +666,16 @@ async function run() {
         cookie: oldCookies.refreshCookie,
       },
     });
-    await expectApiError(
-      reuseResponse,
-      401,
-      'REFRESH_TOKEN_REVOKED',
-    );
+    await expectApiError(reuseResponse, 401, 'REFRESH_TOKEN_REVOKED');
   });
 
   await runScenario('expired and revoked refresh rejection', async () => {
     const missingRefreshResponse = await apiRequest('/refresh', {
       method: 'POST',
     });
-    await expectApiError(
-      missingRefreshResponse,
-      401,
-      'REFRESH_TOKEN_REQUIRED',
-    );
+    await expectApiError(missingRefreshResponse, 401, 'REFRESH_TOKEN_REQUIRED');
 
-    const expiredCookies = await loginSuccessfully(
-      users.expiredRefresh,
-    );
+    const expiredCookies = await loginSuccessfully(users.expiredRefresh);
     const expiredHash = hashRefreshToken(
       getCookieValue(expiredCookies.refreshCookie),
     );
@@ -750,15 +694,9 @@ async function run() {
         cookie: expiredCookies.refreshCookie,
       },
     });
-    await expectApiError(
-      expiredResponse,
-      401,
-      'REFRESH_TOKEN_EXPIRED',
-    );
+    await expectApiError(expiredResponse, 401, 'REFRESH_TOKEN_EXPIRED');
 
-    const revokedCookies = await loginSuccessfully(
-      users.revokedRefresh,
-    );
+    const revokedCookies = await loginSuccessfully(users.revokedRefresh);
     const revokedHash = hashRefreshToken(
       getCookieValue(revokedCookies.refreshCookie),
     );
@@ -777,17 +715,11 @@ async function run() {
         cookie: revokedCookies.refreshCookie,
       },
     });
-    await expectApiError(
-      revokedResponse,
-      401,
-      'REFRESH_TOKEN_REVOKED',
-    );
+    await expectApiError(revokedResponse, 401, 'REFRESH_TOKEN_REVOKED');
   });
 
   await runScenario('suspended-user refresh rejection', async () => {
-    const cookies = await loginSuccessfully(
-      users.suspendedRefresh,
-    );
+    const cookies = await loginSuccessfully(users.suspendedRefresh);
     await databasePool.query(
       `
         UPDATE users
@@ -803,17 +735,89 @@ async function run() {
         cookie: cookies.refreshCookie,
       },
     });
-    await expectApiError(
-      response,
-      403,
-      'ACCOUNT_SUSPENDED',
+    await expectApiError(response, 403, 'ACCOUNT_SUSPENDED');
+  });
+
+  await runScenario('admin suspension revokes sessions', async () => {
+    const targetCookies = await loginSuccessfully(users.suspendTarget);
+    const adminCookies = await loginSuccessfully(users.admin);
+
+    const forbiddenResponse = await userApiRequest(
+      `/${users.agent.id}/suspend`,
+      {
+        method: 'POST',
+        headers: {
+          cookie: customerCookies.accessCookie,
+        },
+      },
     );
+    await expectApiError(forbiddenResponse, 403, 'FORBIDDEN');
+
+    const invalidIdResponse = await userApiRequest('/abc/suspend', {
+      method: 'POST',
+      headers: { cookie: adminCookies.accessCookie },
+    });
+    await expectApiError(invalidIdResponse, 400, 'INVALID_USER_ID');
+
+    const unknownIdResponse = await userApiRequest('/987654321/suspend', {
+      method: 'POST',
+      headers: { cookie: adminCookies.accessCookie },
+    });
+    await expectApiError(unknownIdResponse, 404, 'USER_NOT_FOUND');
+
+    const suspendResponse = await userApiRequest(
+      `/${users.suspendTarget.id}/suspend`,
+      {
+        method: 'POST',
+        headers: { cookie: adminCookies.accessCookie },
+      },
+    );
+    assert.equal(suspendResponse.status, 200);
+
+    const suspendBody = await suspendResponse.json();
+    assert.equal(suspendBody.data.user.accountStatus, 'suspended');
+
+    const meResponse = await apiRequest('/me', {
+      headers: { cookie: targetCookies.accessCookie },
+    });
+    await expectApiError(meResponse, 403, 'ACCOUNT_SUSPENDED');
+
+    const refreshResponse = await apiRequest('/refresh', {
+      method: 'POST',
+      headers: { cookie: targetCookies.refreshCookie },
+    });
+    await expectApiError(refreshResponse, 401, 'REFRESH_TOKEN_REVOKED');
+  });
+
+  await runScenario('admin reinstatement restores access', async () => {
+    await databasePool.query(
+      `
+        UPDATE users
+        SET account_status = 'suspended'
+        WHERE id = $1
+      `,
+      [users.reinstateTarget.id],
+    );
+
+    const adminCookies = await loginSuccessfully(users.admin);
+
+    const reinstateResponse = await userApiRequest(
+      `/${users.reinstateTarget.id}/reinstate`,
+      {
+        method: 'POST',
+        headers: { cookie: adminCookies.accessCookie },
+      },
+    );
+    assert.equal(reinstateResponse.status, 200);
+
+    const reinstateBody = await reinstateResponse.json();
+    assert.equal(reinstateBody.data.user.accountStatus, 'active');
+
+    await loginSuccessfully(users.reinstateTarget);
   });
 
   await runScenario('concurrent refresh protection', async () => {
-    const cookies = await loginSuccessfully(
-      users.concurrentRefresh,
-    );
+    const cookies = await loginSuccessfully(users.concurrentRefresh);
 
     const responses = await Promise.all([
       apiRequest('/refresh', {
@@ -840,10 +844,7 @@ async function run() {
       `,
       [users.concurrentRefresh.id],
     );
-    assert.equal(
-      sessionCountResult.rows[0].session_count,
-      2,
-    );
+    assert.equal(sessionCountResult.rows[0].session_count, 2);
   });
 
   await runScenario('idempotent logout and cookie clearing', async () => {
@@ -851,8 +852,7 @@ async function run() {
     const refreshTokenHash = hashRefreshToken(
       getCookieValue(cookies.refreshCookie),
     );
-    const cookieHeader =
-      `${cookies.accessCookie}; ${cookies.refreshCookie}`;
+    const cookieHeader = `${cookies.accessCookie}; ${cookies.refreshCookie}`;
 
     const logoutResponse = await apiRequest('/logout', {
       method: 'POST',
@@ -860,8 +860,7 @@ async function run() {
     });
     assert.equal(logoutResponse.status, 204);
 
-    const clearedCookieHeaders =
-      getSetCookieHeaders(logoutResponse);
+    const clearedCookieHeaders = getSetCookieHeaders(logoutResponse);
     const clearedAccessCookie = findCookieHeader(
       clearedCookieHeaders,
       'accessToken',
@@ -872,18 +871,9 @@ async function run() {
     );
 
     assertCookieOptions(clearedAccessCookie, '/api');
-    assertCookieOptions(
-      clearedRefreshCookie,
-      '/api/v1/auth',
-    );
-    assert.equal(
-      getCookieValue(getCookiePair(clearedAccessCookie)),
-      '',
-    );
-    assert.equal(
-      getCookieValue(getCookiePair(clearedRefreshCookie)),
-      '',
-    );
+    assertCookieOptions(clearedRefreshCookie, '/api/v1/auth');
+    assert.equal(getCookieValue(getCookiePair(clearedAccessCookie)), '');
+    assert.equal(getCookieValue(getCookiePair(clearedRefreshCookie)), '');
 
     const sessionResult = await databasePool.query(
       `
@@ -893,16 +883,12 @@ async function run() {
       `,
       [refreshTokenHash],
     );
-    assert.equal(
-      Boolean(sessionResult.rows[0].revoked_at),
-      true,
-    );
+    assert.equal(Boolean(sessionResult.rows[0].revoked_at), true);
 
-    const refreshAfterLogoutResponse =
-      await apiRequest('/refresh', {
-        method: 'POST',
-        headers: { cookie: cookies.refreshCookie },
-      });
+    const refreshAfterLogoutResponse = await apiRequest('/refresh', {
+      method: 'POST',
+      headers: { cookie: cookies.refreshCookie },
+    });
     await expectApiError(
       refreshAfterLogoutResponse,
       401,
@@ -915,17 +901,17 @@ async function run() {
     });
     assert.equal(secondLogoutResponse.status, 204);
 
-    const missingCookieLogoutResponse =
-      await apiRequest('/logout', { method: 'POST' });
+    const missingCookieLogoutResponse = await apiRequest('/logout', {
+      method: 'POST',
+    });
     assert.equal(missingCookieLogoutResponse.status, 204);
 
-    const unknownTokenLogoutResponse =
-      await apiRequest('/logout', {
-        method: 'POST',
-        headers: {
-          cookie: `refreshToken=unknown-${testSuffix}`,
-        },
-      });
+    const unknownTokenLogoutResponse = await apiRequest('/logout', {
+      method: 'POST',
+      headers: {
+        cookie: `refreshToken=unknown-${testSuffix}`,
+      },
+    });
     assert.equal(unknownTokenLogoutResponse.status, 204);
   });
 

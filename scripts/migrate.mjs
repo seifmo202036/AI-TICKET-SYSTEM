@@ -1,10 +1,10 @@
 // scripts/migrate.mjs
 
-import pg from "pg";
-import { readdir, readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import {env} from '../src/config/env.ts'
+import pg from 'pg';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { env } from '../src/config/env.ts';
 
 const { Client } = pg;
 
@@ -12,10 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // scripts/../migrations/up
-const migrationsDirectory = path.resolve(
-  __dirname,
-  "../migrations/up",
-);
+const migrationsDirectory = path.resolve(__dirname, '../migrations/up');
 
 const client = new Client({
   connectionString: env.DATABASE_URL,
@@ -33,7 +30,7 @@ async function migrate() {
     `);
 
     const files = (await readdir(migrationsDirectory))
-      .filter((file) => file.endsWith(".sql"))
+      .filter((file) => file.endsWith('.sql'))
       .sort();
 
     if (files.length === 0) {
@@ -56,16 +53,13 @@ async function migrate() {
         continue;
       }
 
-      const migrationPath = path.join(
-        migrationsDirectory,
-        filename,
-      );
+      const migrationPath = path.join(migrationsDirectory, filename);
 
-      const sql = await readFile(migrationPath, "utf8");
+      const sql = await readFile(migrationPath, 'utf8');
 
       console.log(`Applying migration: ${filename}`);
 
-      await client.query("BEGIN");
+      await client.query('BEGIN');
 
       try {
         await client.query(sql);
@@ -78,20 +72,17 @@ async function migrate() {
           [filename],
         );
 
-        await client.query("COMMIT");
+        await client.query('COMMIT');
 
         console.log(`Applied migration: ${filename}`);
       } catch (error) {
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
 
-        throw new Error(
-          `Migration failed: ${filename}`,
-          { cause: error },
-        );
+        throw new Error(`Migration failed: ${filename}`, { cause: error });
       }
     }
 
-    console.log("All migrations completed successfully.");
+    console.log('All migrations completed successfully.');
   } finally {
     await client.end();
   }

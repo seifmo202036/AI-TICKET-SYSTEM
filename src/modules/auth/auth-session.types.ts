@@ -10,7 +10,6 @@ export type AuthSession = {
   createdAt: Date;
 };
 
-
 export type CreateAuthSessionInput = {
   id: string;
   userId: UserId;

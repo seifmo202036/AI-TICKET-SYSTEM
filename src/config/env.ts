@@ -6,15 +6,9 @@ const envSchema = z.object({
     .enum(['development', 'production', 'test'])
     .default('development'),
 
-  PORT: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(3000),
+  PORT: z.coerce.number().int().positive().default(3000),
 
-  DATABASE_URL: z
-    .string()
-    .min(1, 'DATABASE_URL is required'),
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
   JWT_SECRET: z
     .string()
@@ -34,26 +28,20 @@ const envSchema = z.object({
     .max(30)
     .default(7),
 
-  CLIENT_ORIGIN: z
-    .string()
-    .url()
-    .default('http://localhost:5173'),
+  CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
 
-  BCRYPT_SALT_ROUNDS: z.coerce
-    .number()
-    .int()
-    .min(10)
-    .max(14)
-    .default(12),
+  BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(14).default(12),
 });
 const result = envSchema.safeParse(process.env);
 
-if(!result.success){
+if (!result.success) {
   const messages = result.error.issues
     .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
     .join('\n');
 
   throw new Error(`Environment configuration is invalid:\n${messages}`);
 }
+
+export type Env = z.infer<typeof envSchema>;
 
 export const env = result.data;

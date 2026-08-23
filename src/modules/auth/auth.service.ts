@@ -3,7 +3,7 @@ import { env } from '../../config/env.js';
 import { pool } from '../../db/pool.js';
 
 import { AppError } from '../../errors/app-error.js';
-import { randomUUID } from "node:crypto";
+import { randomUUID } from 'node:crypto';
 
 import {
   createAccessToken,
@@ -35,21 +35,14 @@ import type { LoginInput, SignupInput } from './auth.validation.js';
 
 const BCRYPT_SALT_ROUNDS = env.BCRYPT_SALT_ROUNDS;
 
-export async function signup(
-  input: SignupInput,
-): Promise<PublicUser> {
+export async function signup(input: SignupInput): Promise<PublicUser> {
   // 1. Normalize input
-  const normalizedEmail = input.email
-    .trim()
-    .toLowerCase();
+  const normalizedEmail = input.email.trim().toLowerCase();
 
-  const normalizedUserName = input.userName
-    .trim()
-    .toLowerCase();
+  const normalizedUserName = input.userName.trim().toLowerCase();
 
   // 2. Check duplicate email
-  const existingEmailUser =
-    await findUserByEmail(normalizedEmail);
+  const existingEmailUser = await findUserByEmail(normalizedEmail);
 
   if (existingEmailUser) {
     throw new AppError(
@@ -60,8 +53,7 @@ export async function signup(
   }
 
   // 3. Check duplicate username
-  const existingUserName =
-    await findUserByUserName(normalizedUserName);
+  const existingUserName = await findUserByUserName(normalizedUserName);
 
   if (existingUserName) {
     throw new AppError(
@@ -72,19 +64,14 @@ export async function signup(
   }
 
   // 4. Hash password
-  const passwordHash = await bcrypt.hash(
-    input.password,
-    BCRYPT_SALT_ROUNDS,
-  );
+  const passwordHash = await bcrypt.hash(input.password, BCRYPT_SALT_ROUNDS);
 
   // 5. Determine role
   const role: UserRole = input.role;
 
   // 6. Determine account status
   const accountStatus: AccountStatus =
-    role === 'customer'
-      ? 'active'
-      : 'pending';
+    role === 'customer' ? 'active' : 'pending';
 
   // 7. Insert user
   const user = await createUser({
@@ -99,82 +86,72 @@ export async function signup(
   return user;
 }
 
-export async function login(
-  input: LoginInput,
-): Promise<LoginResult> {
-  const normalizedEmail = input.email
-    .trim()
-    .toLowerCase();
+export async function login(input: LoginInput): Promise<LoginResult> {
+  const normalizedEmail = input.email.trim().toLowerCase();
 
   // 1. Find user
-  const user =
-    await findUserByEmail(normalizedEmail);
+  const user = await findUserByEmail(normalizedEmail);
 
   if (!user) {
     throw new AppError(
       401,
-      "The email address or password is incorrect.",
-      "INVALID_CREDENTIALS",
+      'The email address or password is incorrect.',
+      'INVALID_CREDENTIALS',
     );
   }
 
   // 2. Compare plain password with stored hash
-  const passwordMatches =
-    await bcrypt.compare(
-      input.password,
-      user.password_hash,
-    );
+  const passwordMatches = await bcrypt.compare(
+    input.password,
+    user.password_hash,
+  );
 
   if (!passwordMatches) {
     throw new AppError(
       401,
-      "The email address or password is incorrect.",
-      "INVALID_CREDENTIALS",
+      'The email address or password is incorrect.',
+      'INVALID_CREDENTIALS',
     );
   }
 
   // 3. Check account status
-  if (user.account_status === "pending") {
+  if (user.account_status === 'pending') {
     throw new AppError(
       403,
-      "Your account is awaiting approval.",
-      "ACCOUNT_PENDING",
+      'Your account is awaiting approval.',
+      'ACCOUNT_PENDING',
     );
   }
 
-  if (user.account_status === "suspended") {
+  if (user.account_status === 'suspended') {
     throw new AppError(
       403,
-      "Your account has been suspended.",
-      "ACCOUNT_SUSPENDED",
+      'Your account has been suspended.',
+      'ACCOUNT_SUSPENDED',
     );
   }
 
-  if (user.account_status !== "active") {
+  if (user.account_status !== 'active') {
     throw new AppError(
       403,
-      "Your account is not active.",
-      "ACCOUNT_NOT_ACTIVE",
+      'Your account is not active.',
+      'ACCOUNT_NOT_ACTIVE',
     );
   }
 
   // 4. Create tokens
-  const accessToken =
-    createAccessToken(user.id);
+  const accessToken = createAccessToken(user.id);
 
-  const refreshToken =
-    createRefreshToken();
+  const refreshToken = createRefreshToken();
 
-  const refreshTokenHash =
-    hashRefreshToken(refreshToken);
+  const refreshTokenHash = hashRefreshToken(refreshToken);
 
   // 5. Store refresh session
   await createAuthSession({
     id: randomUUID(),
     userId: user.id,
     refreshTokenHash,
-    expiresAt:
-      getRefreshTokenExpiresAt(),
+    expiresAt: getRefreshTokenExpiresAt(),
   });
 
   // 6. Return result
@@ -184,8 +161,7 @@ export async function login(
       userName: user.user_name,
       email: user.email,
       role: user.role,
-      accountStatus:
-        user.account_status,
+      accountStatus: user.account_status,
       createdAt: user.created_at,
     },
     accessToken,
@@ -199,19 +175,17 @@ export async function refreshAuthentication(
   accessToken: string;
   refreshToken: string;
 }> {
-  const currentRefreshTokenHash =
-    hashRefreshToken(currentRefreshToken);
+  const currentRefreshTokenHash = hashRefreshToken(currentRefreshToken);
 
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    const currentSession =
-      await findAuthSessionByRefreshTokenHashForUpdate(
-        client,
-        currentRefreshTokenHash,
-      );
+    const currentSession = await findAuthSessionByRefreshTokenHashForUpdate(
+      client,
+      currentRefreshTokenHash,
+    );
 
     if (!currentSession) {
       throw new AppError(
@@ -237,10 +211,7 @@ export async function refreshAuthentication(
       );
     }
 
-    const currentUser = await findUserById(
-      currentSession.userId,
-      client,
-    );
+    const currentUser = await findUserById(currentSession.userId, client);
 
     if (!currentUser) {
       throw new AppError(
@@ -266,12 +237,9 @@ export async function refreshAuthentication(
       );
     }
 
-    const newAccessToken = createAccessToken(
-      currentUser.id,
-    );
+    const newAccessToken = createAccessToken(currentUser.id);
     const newRefreshToken = createRefreshToken();
-    const newRefreshTokenHash =
-      hashRefreshToken(newRefreshToken);
+    const newRefreshTokenHash = hashRefreshToken(newRefreshToken);
     const newSessionId = randomUUID();
 
     await createAuthSession(
@@ -284,11 +252,7 @@ export async function refreshAuthentication(
       client,
     );
 
-    await revokeAndReplaceAuthSession(
-      client,
-      currentSession.id,
-      newSessionId,
-    );
+    await revokeAndReplaceAuthSession(client, currentSession.id, newSessionId);
 
     await client.query('COMMIT');
 
@@ -312,13 +276,8 @@ export async function refreshAuthentication(
   }
 }
 
-export async function logout(
-  refreshToken: string,
-): Promise<void> {
-  const refreshTokenHash =
-    hashRefreshToken(refreshToken);
+export async function logout(refreshToken: string): Promise<void> {
+  const refreshTokenHash = hashRefreshToken(refreshToken);
 
-  await revokeAuthSessionByRefreshTokenHash(
-    refreshTokenHash,
-  );
+  await revokeAuthSessionByRefreshTokenHash(refreshTokenHash);
 }

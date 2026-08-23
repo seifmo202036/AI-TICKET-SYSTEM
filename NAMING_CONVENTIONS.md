@@ -62,3 +62,9 @@ The existing username terminology is intentionally preserved.
 ## Allowed source-script exception
 
 `scripts/migrate.mjs` currently imports the TypeScript environment module directly because it is a source-running migration script. Its `../src/config/env.ts` import is an intentional script-runtime exception to the `.js` import convention used by compiled TypeScript application files.
+
+## Tooling
+
+- Formatting is owned by Prettier (`npm run format`): single quotes, semicolons, 80-character print width, trailing commas.
+- Linting is owned by oxlint (`npm run lint`). ESLint + typescript-eslint is deferred until typescript-eslint supports TypeScript >= 7 (see typescript-eslint issue #10940).
+- Type-only imports should use `import type` (`consistent-type-imports`).
