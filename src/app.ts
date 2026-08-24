@@ -9,7 +9,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFoundMiddleware } from './middleware/not-found.middleware.js';
-
+import { ticketRouter } from './modules/tickets/tickets.router.js';
 export const app = express();
 
 app.use(helmet());
@@ -31,6 +31,7 @@ app.use(cookieParser());
 // routes
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', usersRouter);
+app.use('/api/v1/tickets',ticketRouter);
 
 // 404 not found middleware
 app.use(notFoundMiddleware);

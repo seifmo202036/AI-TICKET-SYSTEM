@@ -1,6 +1,6 @@
 import { pool } from '../../db/pool.js';
 import { AppError } from '../../errors/app-error.js';
-import type { PoolClient } from 'pg';
+import type { PoolClient } from 'pg'; // used for transaction to reserve one DB connection until the end of that transaction
 
 interface DbUserRow {
   id: string;
