@@ -44,5 +44,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["node_modules", "dist", "coverage", "vitest.config.ts"]
+  "exclude": ["node_modules", "dist", "coverage", "vitest.config.ts", "e2e"]
 }

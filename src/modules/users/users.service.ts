@@ -3,7 +3,11 @@ import { pool } from '../../db/pool.js';
 import { AppError } from '../../errors/app-error.js';
 
 import { revokeAllAuthSessionsForUser } from '../auth/auth-session.repository.js';
-import { updateUserAccountStatus } from './user.repository.js';
+import {
+  findUserById,
+  findUsersByRoleAndStatus,
+  updateUserAccountStatus,
+} from './user.repository.js';
 
 import type { PublicUser, UserId } from './user.types.js';
 
@@ -59,4 +63,49 @@ export async function reinstateUser(userId: UserId): Promise<PublicUser> {
   }
 
   return reinstatedUser;
+}
+
+export async function getPendingAgents(): Promise<PublicUser[]> {
+  return findUsersByRoleAndStatus('agent', 'pending');
+}
+
+export async function approveAgent(userId: UserId): Promise<PublicUser> {
+  // Agents sign up as pending and must be approved by an admin before login.
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw new AppError(
+      404,
+      'The agent to approve was not found.',
+      'USER_NOT_FOUND',
+    );
+  }
+
+  if (user.role !== 'agent') {
+    throw new AppError(
+      409,
+      'Only agent accounts can be approved.',
+      'NOT_AN_AGENT',
+    );
+  }
+
+  if (user.accountStatus !== 'pending') {
+    throw new AppError(
+      409,
+      'This agent account is not awaiting approval.',
+      'AGENT_NOT_PENDING',
+    );
+  }
+
+  const approvedAgent = await updateUserAccountStatus(userId, 'active');
+
+  if (!approvedAgent) {
+    throw new AppError(
+      404,
+      'The agent to approve was not found.',
+      'USER_NOT_FOUND',
+    );
+  }
+
+  return approvedAgent;
 }

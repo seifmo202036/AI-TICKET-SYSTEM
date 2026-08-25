@@ -8,12 +8,14 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint src scripts",
+    "typecheck:e2e": "tsc -p e2e/tsconfig.json",
+    "lint": "oxlint src scripts e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:auth": "node scripts/auth-smoke-test.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "migrate": "node scripts/migrate.mjs"
   },
   "repository": {
@@ -37,10 +39,12 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.11.0",
+    "node-cron": "^4.6.0",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
@@ -48,6 +52,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.1.1",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.20.0",
     "express": "^5.2.1",
     "oxlint": "^1.79.0",

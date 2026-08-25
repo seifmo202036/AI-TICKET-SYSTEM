@@ -1,19 +1,22 @@
 import type { Request, RequestHandler } from 'express';
 
 import { AppError } from '../../errors/app-error.js';
-import type { UserId } from './user.types.js';
-import { reinstateUser, suspendUser } from './users.service.js';
+import { userIdParamsSchema } from './users.validation.js';
+import {
+  approveAgent,
+  getPendingAgents,
+  reinstateUser,
+  suspendUser,
+} from './users.service.js';
 
-const USER_ID_PATTERN = /^[1-9]\d*$/;
+function parseUserIdParam(request: Request): string {
+  const result = userIdParamsSchema.safeParse(request.params);
 
-function parseUserIdParam(request: Request): UserId {
-  const rawUserId: unknown = request.params.userId;
-
-  if (typeof rawUserId === 'string' && USER_ID_PATTERN.test(rawUserId)) {
-    return rawUserId;
+  if (!result.success) {
+    throw new AppError(400, 'The user id is invalid.', 'INVALID_USER_ID');
   }
 
-  throw new AppError(400, 'The user id is invalid.', 'INVALID_USER_ID');
+  return result.data.userId;
 }
 
 export const suspendUserController: RequestHandler = async (
@@ -43,6 +46,43 @@ export const reinstateUserController: RequestHandler = async (
   try {
     const userId = parseUserIdParam(request);
     const user = await reinstateUser(userId);
+
+    response.status(200).json({
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPendingAgentsController: RequestHandler = async (
+  _request,
+  response,
+  next,
+): Promise<void> => {
+  try {
+    const agents = await getPendingAgents();
+
+    response.status(200).json({
+      data: {
+        agents,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const approveAgentController: RequestHandler = async (
+  request,
+  response,
+  next,
+): Promise<void> => {
+  try {
+    const userId = parseUserIdParam(request);
+    const user = await approveAgent(userId);
 
     response.status(200).json({
       data: {
