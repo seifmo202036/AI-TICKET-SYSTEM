@@ -13,6 +13,13 @@ import {
     resolveTicketController,
     closeTicketController,
 } from "./tickets.controller.js";
+import {
+    createTicketMessageController,
+    getTicketMessagesController,
+} from "../ticket-messages/ticket-messages.controller.js";
+import {
+    ticketMessageImageUploadMiddleware,
+} from "../ticket-messages/ticket-message-upload.middleware.js";
 
 
 // CREATE TICKET
@@ -77,6 +84,25 @@ ticketRouter.post(
     authenticateMiddleware,
     authorizeMiddleware("customer"),
     closeTicketController,
+);
+
+
+// SEND A TICKET MESSAGE
+// Authorization is dynamic: ticket customer or currently assigned agent.
+ticketRouter.post(
+    "/:ticketId/messages",
+    authenticateMiddleware,
+    ticketMessageImageUploadMiddleware,
+    createTicketMessageController,
+);
+
+
+// GET TICKET MESSAGES
+// Must be BEFORE /:ticketId
+ticketRouter.get(
+    "/:ticketId/messages",
+    authenticateMiddleware,
+    getTicketMessagesController,
 );
 
 

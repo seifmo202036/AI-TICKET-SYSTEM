@@ -37,6 +37,14 @@ export interface SeededUser {
   accountStatus: SeededAccountStatus;
 }
 
+interface DbSeededUserRow {
+  id: string;
+  user_name: string;
+  email: string;
+  role: SeededRole;
+  account_status: SeededAccountStatus;
+}
+
 export function uniqueName(label: string): string {
   return `${label}_${runSuffix}`;
 }
@@ -74,7 +82,19 @@ export async function seedUser(
     [userName, email, passwordHash, role, accountStatus],
   );
 
-  return result.rows[0] as SeededUser;
+  const user = result.rows[0] as DbSeededUserRow | undefined;
+
+  if (!user) {
+    throw new Error('Unable to seed e2e user');
+  }
+
+  return {
+    id: user.id,
+    userName: user.user_name,
+    email: user.email,
+    role: user.role,
+    accountStatus: user.account_status,
+  };
 }
 
 export async function createTicketRow(

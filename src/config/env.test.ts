@@ -47,6 +47,7 @@ describe('env schema', () => {
     expect(env.ACCESS_TOKEN_EXPIRES_IN_MINUTES).toBe(15);
     expect(env.REFRESH_TOKEN_EXPIRES_IN_DAYS).toBe(7);
     expect(env.BCRYPT_SALT_ROUNDS).toBe(12);
+    expect(env.S3_SIGNED_URL_EXPIRES_IN_SECONDS).toBe(300);
   });
 
   it('applies documented defaults for optional values', async () => {

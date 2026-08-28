@@ -31,6 +31,18 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
 
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(14).default(12),
+
+  S3_REGION: z.string().min(1).optional(),
+  S3_BUCKET_NAME: z.string().min(1).optional(),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SIGNED_URL_EXPIRES_IN_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(3600)
+    .default(300),
 });
 const result = envSchema.safeParse(process.env);
 
