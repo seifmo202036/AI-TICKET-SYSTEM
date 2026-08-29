@@ -18,10 +18,19 @@ async function importEnvWith(
 ): Promise<Env> {
   vi.resetModules();
 
-  for (const [key, value] of Object.entries({
+  const testEnvironment: Record<string, string | undefined> = {
     ...VALID_ENV,
+    AI_PROVIDER: undefined,
+    AI_API_KEY: undefined,
+    AI_BASE_URL: undefined,
+    AI_MODEL: undefined,
+    AI_TIMEOUT_MS: undefined,
+    REDIS_URL: undefined,
+    AI_TRIAGE_CONCURRENCY: undefined,
     ...overrides,
-  })) {
+  };
+
+  for (const [key, value] of Object.entries(testEnvironment)) {
     if (value === undefined) {
       vi.stubEnv(key, '');
       delete process.env[key];
@@ -48,6 +57,10 @@ describe('env schema', () => {
     expect(env.REFRESH_TOKEN_EXPIRES_IN_DAYS).toBe(7);
     expect(env.BCRYPT_SALT_ROUNDS).toBe(12);
     expect(env.S3_SIGNED_URL_EXPIRES_IN_SECONDS).toBe(300);
+    expect(env.AI_TIMEOUT_MS).toBe(15000);
+    expect(env.AI_BASE_URL).toBe('https://api.groq.com/openai/v1');
+    expect(env.REDIS_URL).toBe('redis://localhost:6379');
+    expect(env.AI_TRIAGE_CONCURRENCY).toBe(3);
   });
 
   it('applies documented defaults for optional values', async () => {
@@ -64,6 +77,54 @@ describe('env schema', () => {
     expect(env.ACCESS_TOKEN_EXPIRES_IN_MINUTES).toBe(15);
     expect(env.REFRESH_TOKEN_EXPIRES_IN_DAYS).toBe(7);
     expect(env.BCRYPT_SALT_ROUNDS).toBe(12);
+  });
+
+  it('keeps AI disabled when its configuration is incomplete', async () => {
+    const env = await importEnvWith({
+      AI_PROVIDER: 'openai',
+      AI_API_KEY: undefined,
+      AI_MODEL: 'test-model',
+    });
+    const module = await import('./env.js');
+
+    expect(env.AI_PROVIDER).toBe('openai');
+    expect(module.AI_ENABLED).toBe(false);
+  });
+
+  it('enables AI only when all required configuration is present', async () => {
+    await importEnvWith({
+      AI_PROVIDER: 'openai',
+      AI_API_KEY: 'test-api-key',
+      AI_BASE_URL: 'https://api.groq.com/openai/v1',
+      AI_MODEL: 'test-model',
+      AI_TIMEOUT_MS: '20000',
+      REDIS_URL: 'redis://redis.internal:6379',
+      AI_TRIAGE_CONCURRENCY: '2',
+    });
+    const module = await import('./env.js');
+
+    expect(module.AI_ENABLED).toBe(true);
+    expect(module.getAiConfiguration()).toEqual({
+      provider: 'openai',
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'test-model',
+      timeoutMs: 20000,
+    });
+    expect(module.env.REDIS_URL).toBe('redis://redis.internal:6379');
+    expect(module.env.AI_TRIAGE_CONCURRENCY).toBe(2);
+  });
+
+  it('rejects an unsupported AI provider', async () => {
+    await expect(importEnvWith({ AI_PROVIDER: 'unsupported' })).rejects.toThrow(
+      /AI_PROVIDER/,
+    );
+  });
+
+  it('rejects an invalid AI base URL', async () => {
+    await expect(importEnvWith({ AI_BASE_URL: 'not-a-url' })).rejects.toThrow(
+      /AI_BASE_URL/,
+    );
   });
 
   it('rejects a missing JWT_SECRET', async () => {

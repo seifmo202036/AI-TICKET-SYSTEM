@@ -26,6 +26,7 @@ import {
   insertTicketStatusHistory,
   getAssignedTickets as getAssignedTicketsRepo,
 } from './tickets.repository.js';
+import { enqueueAiTriageJob } from '../../queues/ai-triage.queue.js';
 
 vi.mock('../../db/pool.js', () => ({
   pool: {
@@ -46,6 +47,10 @@ vi.mock('./tickets.repository.js', () => ({
   getAssignedTickets: vi.fn(),
 }));
 
+vi.mock('../../queues/ai-triage.queue.js', () => ({
+  enqueueAiTriageJob: vi.fn(),
+}));
+
 const mockedCreateTicketRepo = vi.mocked(createTicketRepo);
 const mockedFindTicketById = vi.mocked(findTicketById);
 const mockedGetCustomerTicketsRepo = vi.mocked(getCustomerTicketsRepo);
@@ -56,6 +61,7 @@ const mockedResolveTicketRepo = vi.mocked(resolveTicketRepo);
 const mockedCloseTicketRepo = vi.mocked(closeTicketRepo);
 const mockedInsertTicketStatusHistory = vi.mocked(insertTicketStatusHistory);
 const mockedGetAssignedTicketsRepo = vi.mocked(getAssignedTicketsRepo);
+const mockedEnqueueAiTriageJob = vi.mocked(enqueueAiTriageJob);
 
 function createFakeClient(): PoolClient {
   return {
@@ -105,14 +111,53 @@ describe('createTicket', () => {
     description: 'I was charged twice.',
   };
 
-  it('creates a ticket for the authenticated customer', async () => {
-    const row = buildTicketRow();
+  it('creates an immediately open ticket when AI is disabled', async () => {
+    const row = buildTicketRow({ status: 'open', ai_status: 'disabled' });
     mockedCreateTicketRepo.mockResolvedValueOnce(row);
 
-    const ticket = await createTicket(input, '100');
+    const ticket = await createTicket(input, '100', false);
 
-    expect(mockedCreateTicketRepo).toHaveBeenCalledWith(input, '100');
+    expect(mockedCreateTicketRepo).toHaveBeenCalledWith(
+      input,
+      '100',
+      'open',
+      'disabled',
+    );
+    expect(mockedEnqueueAiTriageJob).not.toHaveBeenCalled();
     expect(ticket).toBe(row);
+  });
+
+  it('creates a queued triaging ticket and enqueues its id when AI is enabled', async () => {
+    const row = buildTicketRow({ id: '42', ai_status: 'queued' });
+    mockedCreateTicketRepo.mockResolvedValueOnce(row);
+
+    await createTicket(input, '100', true);
+
+    expect(mockedCreateTicketRepo).toHaveBeenCalledWith(
+      input,
+      '100',
+      'triaging',
+      'queued',
+    );
+    expect(mockedEnqueueAiTriageJob).toHaveBeenCalledWith('42');
+  });
+
+  it('keeps a queued ticket when Redis enqueueing fails', async () => {
+    const row = buildTicketRow({ id: '42', ai_status: 'queued' });
+    mockedCreateTicketRepo.mockResolvedValueOnce(row);
+    mockedEnqueueAiTriageJob.mockRejectedValueOnce(
+      new Error('Redis unavailable'),
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const ticket = await createTicket(input, '100', true);
+
+    expect(ticket).toBe(row);
+    expect(mockedEnqueueAiTriageJob).toHaveBeenCalledWith('42');
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it('throws TICKET_CREATION_FAILED when the repository returns nothing', async () => {
@@ -278,18 +323,21 @@ describe('claimTicket', () => {
   it.each([
     buildTicketRow({ status: 'assigned', assigned_agent_id: '901' }),
     buildTicketRow({ status: 'resolved', assigned_agent_id: null }),
-  ])('throws TICKET_NOT_CLAIMABLE when the ticket is no longer claimable', async (locked) => {
-    const client = createFakeClient();
-    mockedPoolConnect.mockResolvedValueOnce(client);
-    mockedFindTicketByIdForUpdate.mockResolvedValueOnce(locked);
+  ])(
+    'throws TICKET_NOT_CLAIMABLE when the ticket is no longer claimable',
+    async (locked) => {
+      const client = createFakeClient();
+      mockedPoolConnect.mockResolvedValueOnce(client);
+      mockedFindTicketByIdForUpdate.mockResolvedValueOnce(locked);
 
-    const error = await getAppError(claimTicket('1', '900'));
+      const error = await getAppError(claimTicket('1', '900'));
 
-    expect(error.statusCode).toBe(409);
-    expect(error.code).toBe('TICKET_NOT_CLAIMABLE');
-    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
-    expect(mockedClaimTicketRepo).not.toHaveBeenCalled();
-  });
+      expect(error.statusCode).toBe(409);
+      expect(error.code).toBe('TICKET_NOT_CLAIMABLE');
+      expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+      expect(mockedClaimTicketRepo).not.toHaveBeenCalled();
+    },
+  );
 
   it('rolls back and rethrows when the history insert fails', async () => {
     const client = createFakeClient();

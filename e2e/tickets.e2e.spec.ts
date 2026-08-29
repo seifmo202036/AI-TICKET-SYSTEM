@@ -4,7 +4,6 @@ import {
   cleanupE2eData,
   getTicketStatusHistory,
   seedUser,
-  setTicketStatus,
   type SeededUser,
 } from './helpers/db.helper.js';
 import {
@@ -46,7 +45,7 @@ test.afterAll(async () => {
 });
 
 test.describe('ticket creation', () => {
-  test('creates a ticket for the customer in triaging status', async ({
+  test('creates an immediately open ticket when AI is disabled', async ({
     request,
   }) => {
     const response = await request.post(`${API_PREFIX}/tickets/create`, {
@@ -61,13 +60,18 @@ test.describe('ticket creation', () => {
 
     const body = (await response.json()) as {
       message: string;
-      ticket: { id: string; status: string; customer_id: string };
+      ticket: {
+        id: string;
+        status: string;
+        ai_status: string;
+        customer_id: string;
+      };
     };
 
     expect(body.message).toBe('Ticket created successfully');
 
-    // New tickets wait for the AI worker to move them to open
-    expect(body.ticket.status).toBe('triaging');
+    expect(body.ticket.status).toBe('open');
+    expect(body.ticket.ai_status).toBe('disabled');
     expect(String(body.ticket.customer_id)).toBe(customerA.id);
 
     createdTicketIds.push(body.ticket.id);
@@ -123,26 +127,9 @@ test.describe('agent queue and claiming', () => {
     createdTicketIds.push(ticketId);
   });
 
-  test('queue is empty while the ticket is still triaging', async ({
+  test('queue shows a newly created ticket immediately when AI is disabled', async ({
     request,
   }) => {
-    const response = await request.get(`${API_PREFIX}/tickets/queue`, {
-      headers: { cookie: agentACookies.accessCookie },
-    });
-
-    expect(response.status()).toBe(200);
-
-    const body = (await response.json()) as { tickets: Array<{ id: string }> };
-
-    expect(
-      body.tickets.find((ticket) => ticket.id === ticketId),
-    ).toBeUndefined();
-  });
-
-  test('queue shows the ticket once it is open', async ({ request }) => {
-    // Stands in for the AI worker that opens triaged tickets
-    await setTicketStatus(ticketId, 'open');
-
     const response = await request.get(`${API_PREFIX}/tickets/queue`, {
       headers: { cookie: agentACookies.accessCookie },
     });
@@ -277,7 +264,6 @@ test.describe('resolve flow', () => {
     ticketId = body.ticket.id;
     createdTicketIds.push(ticketId);
 
-    await setTicketStatus(ticketId, 'open');
     await request.post(`${API_PREFIX}/tickets/${ticketId}/claim`, {
       headers: { cookie: agentACookies.accessCookie },
     });
@@ -344,7 +330,6 @@ test.describe('close flow', () => {
     ticketId = body.ticket.id;
     createdTicketIds.push(ticketId);
 
-    await setTicketStatus(ticketId, 'open');
     await request.post(`${API_PREFIX}/tickets/${ticketId}/claim`, {
       headers: { cookie: agentACookies.accessCookie },
     });
@@ -369,7 +354,6 @@ test.describe('close flow', () => {
     const unresolvedTicketId = createBody.ticket.id;
     createdTicketIds.push(unresolvedTicketId);
 
-    await setTicketStatus(unresolvedTicketId, 'open');
     await request.post(`${API_PREFIX}/tickets/${unresolvedTicketId}/claim`, {
       headers: { cookie: agentACookies.accessCookie },
     });
@@ -462,7 +446,7 @@ test.describe('ticket messages', () => {
     createdTicketIds.push(ticketId);
   });
 
-  test('allows the customer to send a text message while the ticket is triaging', async ({
+  test('allows the customer to send a text message immediately after ticket creation', async ({
     request,
   }) => {
     const response = await request.post(
@@ -537,8 +521,6 @@ test.describe('ticket messages', () => {
   test('allows the agent to claim the ticket and send a message', async ({
     request,
   }) => {
-    await setTicketStatus(ticketId, 'open');
-
     const claimResponse = await request.post(
       `${API_PREFIX}/tickets/${ticketId}/claim`,
       { headers: { cookie: agentACookies.accessCookie } },
