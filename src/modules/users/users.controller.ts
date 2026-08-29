@@ -4,6 +4,8 @@ import { AppError } from '../../errors/app-error.js';
 import { userIdParamsSchema } from './users.validation.js';
 import {
   approveAgent,
+  declineAgent,
+  getManageableUsers,
   getPendingAgents,
   reinstateUser,
   suspendUser,
@@ -19,6 +21,20 @@ function parseUserIdParam(request: Request): string {
   return result.data.userId;
 }
 
+function getAuthenticatedUserId(request: Request): string {
+  const userId = request.auth?.userId;
+
+  if (!userId) {
+    throw new AppError(
+      401,
+      'Authentication is required. Please sign in.',
+      'AUTHENTICATION_REQUIRED',
+    );
+  }
+
+  return userId;
+}
+
 export const suspendUserController: RequestHandler = async (
   request,
   response,
@@ -26,7 +42,7 @@ export const suspendUserController: RequestHandler = async (
 ): Promise<void> => {
   try {
     const userId = parseUserIdParam(request);
-    const user = await suspendUser(userId);
+    const user = await suspendUser(userId, getAuthenticatedUserId(request));
 
     response.status(200).json({
       data: {
@@ -75,6 +91,24 @@ export const getPendingAgentsController: RequestHandler = async (
   }
 };
 
+export const getManageableUsersController: RequestHandler = async (
+  request,
+  response,
+  next,
+): Promise<void> => {
+  try {
+    const users = await getManageableUsers(getAuthenticatedUserId(request));
+
+    response.status(200).json({
+      data: {
+        users,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const approveAgentController: RequestHandler = async (
   request,
   response,
@@ -89,6 +123,21 @@ export const approveAgentController: RequestHandler = async (
         user,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const declineAgentController: RequestHandler = async (
+  request,
+  response,
+  next,
+): Promise<void> => {
+  try {
+    const userId = parseUserIdParam(request);
+    await declineAgent(userId);
+
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

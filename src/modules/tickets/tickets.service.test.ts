@@ -16,6 +16,7 @@ import {
 } from './tickets.service.js';
 import {
   createTicket as createTicketRepo,
+  failTicketAiTriage,
   findTicketById,
   getCustomerTickets as getCustomerTicketsRepo,
   getTicketQueue as getTicketQueueRepo,
@@ -36,6 +37,7 @@ vi.mock('../../db/pool.js', () => ({
 
 vi.mock('./tickets.repository.js', () => ({
   createTicket: vi.fn(),
+  failTicketAiTriage: vi.fn(),
   findTicketById: vi.fn(),
   getCustomerTickets: vi.fn(),
   getTicketQueue: vi.fn(),
@@ -52,6 +54,7 @@ vi.mock('../../queues/ai-triage.queue.js', () => ({
 }));
 
 const mockedCreateTicketRepo = vi.mocked(createTicketRepo);
+const mockedFailTicketAiTriage = vi.mocked(failTicketAiTriage);
 const mockedFindTicketById = vi.mocked(findTicketById);
 const mockedGetCustomerTicketsRepo = vi.mocked(getCustomerTicketsRepo);
 const mockedGetTicketQueueRepo = vi.mocked(getTicketQueueRepo);
@@ -142,20 +145,42 @@ describe('createTicket', () => {
     expect(mockedEnqueueAiTriageJob).toHaveBeenCalledWith('42');
   });
 
-  it('keeps a queued ticket when Redis enqueueing fails', async () => {
+  it('opens a ticket when AI queueing is unavailable', async () => {
     const row = buildTicketRow({ id: '42', ai_status: 'queued' });
+    const availableTicket = buildTicketRow({
+      id: '42',
+      status: 'open',
+      ai_status: 'failed',
+    });
+    const client = createFakeClient();
     mockedCreateTicketRepo.mockResolvedValueOnce(row);
     mockedEnqueueAiTriageJob.mockRejectedValueOnce(
       new Error('Redis unavailable'),
     );
+    mockedPoolConnect.mockResolvedValueOnce(client);
+    mockedFailTicketAiTriage.mockResolvedValueOnce(availableTicket);
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
 
     const ticket = await createTicket(input, '100', true);
 
-    expect(ticket).toBe(row);
+    expect(ticket).toBe(availableTicket);
     expect(mockedEnqueueAiTriageJob).toHaveBeenCalledWith('42');
+    expect(mockedFailTicketAiTriage).toHaveBeenCalledWith(
+      '42',
+      'AI triage is temporarily unavailable. The ticket is ready for an agent.',
+      client,
+    );
+    expect(mockedInsertTicketStatusHistory).toHaveBeenCalledWith(
+      '42',
+      null,
+      'triaging',
+      'open',
+      client,
+    );
+    expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN');
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });

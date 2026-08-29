@@ -282,6 +282,29 @@ export async function updateUserAccountStatus(
   }
 }
 
+export async function deletePendingAgent(userId: UserId): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      `
+        DELETE FROM users
+        WHERE id = $1
+          AND role = 'agent'
+          AND account_status = 'pending'
+      `,
+      [userId],
+    );
+
+    return result.rowCount === 1;
+  } catch (error) {
+    throw new AppError(
+      500,
+      'Unable to decline the agent request. Please try again later.',
+      'DATABASE_QUERY_FAILED',
+      { cause: error },
+    );
+  }
+}
+
 export async function findUsersByRoleAndStatus(
   role: UserRole,
   accountStatus: AccountStatus,
@@ -302,6 +325,45 @@ export async function findUsersByRoleAndStatus(
         ORDER BY created_at ASC
       `,
       [role, accountStatus],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      userName: row.user_name,
+      email: row.email,
+      role: row.role,
+      accountStatus: row.account_status,
+      createdAt: row.created_at,
+    }));
+  } catch (error) {
+    throw new AppError(
+      500,
+      'Unable to list the users. Please try again later.',
+      'DATABASE_QUERY_FAILED',
+      { cause: error },
+    );
+  }
+}
+
+export async function findManageableUsers(
+  excludedUserId: UserId,
+): Promise<PublicUser[]> {
+  try {
+    const result = await pool.query<DbUserRow>(
+      `
+        SELECT
+          id,
+          user_name,
+          email,
+          role,
+          account_status,
+          created_at
+        FROM users
+        WHERE id <> $1
+          AND account_status IN ('active', 'suspended')
+        ORDER BY created_at ASC
+      `,
+      [excludedUserId],
     );
 
     return result.rows.map((row) => ({

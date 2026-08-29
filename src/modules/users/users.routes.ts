@@ -4,6 +4,8 @@ import { authenticateMiddleware } from '../../middleware/authenticate.middleware
 import { authorizeMiddleware } from '../../middleware/authorize.middleware.js';
 import {
   approveAgentController,
+  declineAgentController,
+  getManageableUsersController,
   getPendingAgentsController,
   reinstateUserController,
   suspendUserController,
@@ -18,6 +20,12 @@ usersRouter.get(
   '/agents/pending',
   authorizeMiddleware('admin'),
   getPendingAgentsController,
+);
+
+usersRouter.get(
+  '/',
+  authorizeMiddleware('admin'),
+  getManageableUsersController,
 );
 
 usersRouter.post(
@@ -36,4 +44,10 @@ usersRouter.post(
   '/:userId/approve',
   authorizeMiddleware('admin'),
   approveAgentController,
+);
+
+usersRouter.post(
+  '/:userId/decline',
+  authorizeMiddleware('admin'),
+  declineAgentController,
 );

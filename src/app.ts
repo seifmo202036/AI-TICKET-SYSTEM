@@ -12,6 +12,12 @@ import { notFoundMiddleware } from './middleware/not-found.middleware.js';
 import { ticketRouter } from './modules/tickets/tickets.router.js';
 export const app = express();
 
+// Docker's nginx proxy is one hop away. Local development and direct API
+// access keep this at zero, so user-provided forwarded headers are ignored.
+if (env.TRUST_PROXY_HOPS > 0) {
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
+}
+
 app.use(helmet());
 
 if (env.NODE_ENV === 'development') {
@@ -31,7 +37,7 @@ app.use(cookieParser());
 // routes
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', usersRouter);
-app.use('/api/v1/tickets',ticketRouter);
+app.use('/api/v1/tickets', ticketRouter);
 
 // 404 not found middleware
 app.use(notFoundMiddleware);

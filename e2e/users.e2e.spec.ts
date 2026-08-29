@@ -16,6 +16,7 @@ const seededUserIds: Array<string | number> = [];
 
 let admin: SeededUser;
 let pendingAgent: SeededUser;
+let declinedAgent: SeededUser;
 let plainCustomer: SeededUser;
 let suspendTarget: SeededUser;
 
@@ -25,10 +26,17 @@ let customerCookies: SessionCookies;
 test.beforeAll(async ({ request }) => {
   admin = await seedUser('e2e_users_admin', 'admin', 'active');
   pendingAgent = await seedUser('e2e_users_agent', 'agent', 'pending');
+  declinedAgent = await seedUser('e2e_users_declined', 'agent', 'pending');
   plainCustomer = await seedUser('e2e_users_customer', 'customer', 'active');
   suspendTarget = await seedUser('e2e_users_target', 'customer', 'active');
 
-  seededUserIds.push(admin.id, pendingAgent.id, plainCustomer.id, suspendTarget.id);
+  seededUserIds.push(
+    admin.id,
+    pendingAgent.id,
+    declinedAgent.id,
+    plainCustomer.id,
+    suspendTarget.id,
+  );
 
   adminCookies = (await login(request, admin.email)).cookies;
   customerCookies = (await login(request, plainCustomer.email)).cookies;
@@ -68,6 +76,33 @@ test.describe('pending agent approval flow', () => {
     expect(seededPendingAgent?.accountStatus).toBe('pending');
   });
 
+  test('keeps pending agents out of the access-management list', async ({
+    request,
+  }) => {
+    const response = await request.get(`${API_PREFIX}/users`, {
+      headers: { cookie: adminCookies.accessCookie },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = (await response.json()) as {
+      data: { users: Array<{ id: string; accountStatus: string }> };
+    };
+
+    expect(body.data.users.some((user) => user.id === pendingAgent.id)).toBe(
+      false,
+    );
+    expect(body.data.users.some((user) => user.id === declinedAgent.id)).toBe(
+      false,
+    );
+    expect(
+      body.data.users.some(
+        (user) =>
+          user.id === plainCustomer.id && user.accountStatus === 'active',
+      ),
+    ).toBe(true);
+  });
+
   test('rejects an invalid user id param with 400', async ({ request }) => {
     const response = await request.post(`${API_PREFIX}/users/abc/approve`, {
       headers: { cookie: adminCookies.accessCookie },
@@ -76,21 +111,68 @@ test.describe('pending agent approval flow', () => {
     await expectApiError(response, 400, 'INVALID_USER_ID');
   });
 
+  test('forbids non-admin users from declining agent requests', async ({
+    request,
+  }) => {
+    const response = await request.post(
+      `${API_PREFIX}/users/${declinedAgent.id}/decline`,
+      { headers: { cookie: customerCookies.accessCookie } },
+    );
+
+    await expectApiError(response, 403, 'FORBIDDEN');
+  });
+
   test('returns 404 when approving an unknown user id', async ({ request }) => {
-    const response = await request.post(`${API_PREFIX}/users/987654321/approve`, {
-      headers: { cookie: adminCookies.accessCookie },
-    });
+    const response = await request.post(
+      `${API_PREFIX}/users/987654321/approve`,
+      {
+        headers: { cookie: adminCookies.accessCookie },
+      },
+    );
 
     await expectApiError(response, 404, 'USER_NOT_FOUND');
   });
 
-  test('refuses to approve a customer account with 409', async ({ request }) => {
+  test('refuses to approve a customer account with 409', async ({
+    request,
+  }) => {
     const response = await request.post(
       `${API_PREFIX}/users/${plainCustomer.id}/approve`,
       { headers: { cookie: adminCookies.accessCookie } },
     );
 
     await expectApiError(response, 409, 'NOT_AN_AGENT');
+  });
+
+  test('declines a pending agent request and removes the account', async ({
+    request,
+  }) => {
+    const response = await request.post(
+      `${API_PREFIX}/users/${declinedAgent.id}/decline`,
+      { headers: { cookie: adminCookies.accessCookie } },
+    );
+
+    expect(response.status()).toBe(204);
+
+    const loginResponse = await request.post(`${API_PREFIX}/auth/login`, {
+      data: { email: declinedAgent.email, password: 'TestPassword123!' },
+    });
+
+    await expectApiError(loginResponse, 401, 'INVALID_CREDENTIALS');
+
+    const pendingResponse = await request.get(
+      `${API_PREFIX}/users/agents/pending`,
+      {
+        headers: { cookie: adminCookies.accessCookie },
+      },
+    );
+    const pendingBody = (await pendingResponse.json()) as {
+      data: { agents: Array<{ id: string }> };
+    };
+
+    expect(
+      pendingBody.data.agents.some((agent) => agent.id === declinedAgent.id),
+    ).toBe(false);
   });
 
   test('activates the pending agent so he can log in', async ({ request }) => {
@@ -116,9 +198,12 @@ test.describe('pending agent approval flow', () => {
   test('refuses to approve an already active agent with 409', async ({
     request,
   }) => {
-    const response = await request.post(`${API_PREFIX}/users/${pendingAgent.id}/approve`, {
-      headers: { cookie: adminCookies.accessCookie },
-    });
+    const response = await request.post(
+      `${API_PREFIX}/users/${pendingAgent.id}/approve`,
+      {
+        headers: { cookie: adminCookies.accessCookie },
+      },
+    );
 
     await expectApiError(response, 409, 'AGENT_NOT_PENDING');
   });
@@ -134,14 +219,71 @@ test.describe('suspend and reinstate flow', () => {
   test('forbids agents and customers from suspending users', async ({
     request,
   }) => {
-    const response = await request.post(`${API_PREFIX}/users/${suspendTarget.id}/suspend`, {
+    const response = await request.post(
+      `${API_PREFIX}/users/${suspendTarget.id}/suspend`,
+      {
+        headers: { cookie: customerCookies.accessCookie },
+      },
+    );
+
+    await expectApiError(response, 403, 'FORBIDDEN');
+  });
+
+  test('forbids non-admin users from listing manageable users', async ({
+    request,
+  }) => {
+    const response = await request.get(`${API_PREFIX}/users`, {
       headers: { cookie: customerCookies.accessCookie },
     });
 
     await expectApiError(response, 403, 'FORBIDDEN');
   });
 
-  test('suspends the user and blocks login immediately', async ({ request }) => {
+  test('lists only active and suspended users for an admin', async ({
+    request,
+  }) => {
+    const response = await request.get(`${API_PREFIX}/users`, {
+      headers: { cookie: adminCookies.accessCookie },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = (await response.json()) as {
+      data: {
+        users: Array<{
+          id: string;
+          accountStatus: string;
+          password_hash?: string;
+        }>;
+      };
+    };
+
+    expect(body.data.users.some((user) => user.id === admin.id)).toBe(false);
+    expect(
+      body.data.users.some(
+        (user) =>
+          user.id === suspendTarget.id && user.accountStatus === 'active',
+      ),
+    ).toBe(true);
+    expect(
+      body.data.users.every((user) => user.password_hash === undefined),
+    ).toBe(true);
+  });
+
+  test('refuses a direct self-suspension request', async ({ request }) => {
+    const response = await request.post(
+      `${API_PREFIX}/users/${admin.id}/suspend`,
+      {
+        headers: { cookie: adminCookies.accessCookie },
+      },
+    );
+
+    await expectApiError(response, 409, 'CANNOT_SUSPEND_SELF');
+  });
+
+  test('suspends the user and blocks login immediately', async ({
+    request,
+  }) => {
     const suspendResponse = await request.post(
       `${API_PREFIX}/users/${suspendTarget.id}/suspend`,
       { headers: { cookie: adminCookies.accessCookie } },
@@ -166,6 +308,27 @@ test.describe('suspend and reinstate flow', () => {
     });
 
     await expectApiError(loginResponse, 403, 'ACCOUNT_SUSPENDED');
+  });
+
+  test('shows suspended users in the access-management list', async ({
+    request,
+  }) => {
+    const response = await request.get(`${API_PREFIX}/users`, {
+      headers: { cookie: adminCookies.accessCookie },
+    });
+
+    expect(response.status()).toBe(200);
+
+    const body = (await response.json()) as {
+      data: { users: Array<{ id: string; accountStatus: string }> };
+    };
+
+    expect(
+      body.data.users.some(
+        (user) =>
+          user.id === suspendTarget.id && user.accountStatus === 'suspended',
+      ),
+    ).toBe(true);
   });
 
   test('reinstates the user and restores login', async ({ request }) => {

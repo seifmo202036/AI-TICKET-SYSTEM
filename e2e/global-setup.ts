@@ -6,6 +6,7 @@ import type { FullConfig } from '@playwright/test';
 const STARTUP_TIMEOUT_MS = 30_000;
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 const POLL_INTERVAL_MS = 100;
+const REQUEST_TIMEOUT_MS = 1_000;
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 function waitForExit(child: ChildProcess): Promise<void> {
@@ -19,12 +20,17 @@ function waitForExit(child: ChildProcess): Promise<void> {
 }
 
 async function isServerAvailable(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: controller.signal });
     await response.body?.cancel();
     return true;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -81,13 +87,9 @@ export default async function globalSetup(
   }
 
   if (await isServerAvailable(baseURL)) {
-    if (process.env.CI) {
-      throw new Error(
-        `${baseURL} is already in use; the E2E API server cannot start`,
-      );
-    }
-
-    return async () => {};
+    throw new Error(
+      `${baseURL} is already in use; stop the existing API before running deterministic E2E tests.`,
+    );
   }
 
   const port = new URL(baseURL).port;
@@ -97,6 +99,11 @@ export default async function globalSetup(
       ...process.env,
       NODE_ENV: 'test',
       PORT: port,
+      // API e2e assertions cover the deterministic no-AI path. Explicitly
+      // override a developer's .env so credentials cannot leak into this run.
+      AI_PROVIDER: '',
+      AI_API_KEY: '',
+      AI_MODEL: '',
     },
     stdio: ['ignore', 'inherit', 'inherit'],
   });

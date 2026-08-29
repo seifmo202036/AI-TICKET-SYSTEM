@@ -37,6 +37,8 @@ const envSchema = z.object({
 
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
 
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(2).default(0),
+
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(14).default(12),
 
   S3_REGION: z.string().min(1).optional(),

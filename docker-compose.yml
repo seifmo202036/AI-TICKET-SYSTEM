@@ -6,6 +6,7 @@ x-app-environment: &app-environment
   DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_ticket_system}
   JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before starting Docker Compose}
   CLIENT_ORIGIN: http://localhost:8080
+  TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
   REDIS_URL: redis://redis:6379
 
 services:

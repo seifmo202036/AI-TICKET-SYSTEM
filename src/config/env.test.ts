@@ -27,6 +27,13 @@ async function importEnvWith(
     AI_TIMEOUT_MS: undefined,
     REDIS_URL: undefined,
     AI_TRIAGE_CONCURRENCY: undefined,
+    TRUST_PROXY_HOPS: undefined,
+    S3_REGION: undefined,
+    S3_BUCKET_NAME: undefined,
+    S3_ENDPOINT: undefined,
+    S3_ACCESS_KEY_ID: undefined,
+    S3_SECRET_ACCESS_KEY: undefined,
+    S3_SIGNED_URL_EXPIRES_IN_SECONDS: undefined,
     ...overrides,
   };
 
@@ -56,6 +63,7 @@ describe('env schema', () => {
     expect(env.ACCESS_TOKEN_EXPIRES_IN_MINUTES).toBe(15);
     expect(env.REFRESH_TOKEN_EXPIRES_IN_DAYS).toBe(7);
     expect(env.BCRYPT_SALT_ROUNDS).toBe(12);
+    expect(env.TRUST_PROXY_HOPS).toBe(0);
     expect(env.S3_SIGNED_URL_EXPIRES_IN_SECONDS).toBe(300);
     expect(env.AI_TIMEOUT_MS).toBe(15000);
     expect(env.AI_BASE_URL).toBe('https://api.groq.com/openai/v1');
@@ -70,6 +78,7 @@ describe('env schema', () => {
       ACCESS_TOKEN_EXPIRES_IN_MINUTES: undefined,
       REFRESH_TOKEN_EXPIRES_IN_DAYS: undefined,
       BCRYPT_SALT_ROUNDS: undefined,
+      TRUST_PROXY_HOPS: undefined,
     });
 
     expect(env.NODE_ENV).toBe('development');
@@ -77,6 +86,7 @@ describe('env schema', () => {
     expect(env.ACCESS_TOKEN_EXPIRES_IN_MINUTES).toBe(15);
     expect(env.REFRESH_TOKEN_EXPIRES_IN_DAYS).toBe(7);
     expect(env.BCRYPT_SALT_ROUNDS).toBe(12);
+    expect(env.TRUST_PROXY_HOPS).toBe(0);
   });
 
   it('keeps AI disabled when its configuration is incomplete', async () => {
@@ -152,6 +162,18 @@ describe('env schema', () => {
   it('rejects an invalid client origin', async () => {
     await expect(importEnvWith({ CLIENT_ORIGIN: 'not-a-url' })).rejects.toThrow(
       /CLIENT_ORIGIN/,
+    );
+  });
+
+  it('accepts a bounded trusted-proxy hop count', async () => {
+    const env = await importEnvWith({ TRUST_PROXY_HOPS: '1' });
+
+    expect(env.TRUST_PROXY_HOPS).toBe(1);
+  });
+
+  it('rejects an unsafe trusted-proxy hop count', async () => {
+    await expect(importEnvWith({ TRUST_PROXY_HOPS: '3' })).rejects.toThrow(
+      /TRUST_PROXY_HOPS/,
     );
   });
 });

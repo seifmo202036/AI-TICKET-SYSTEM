@@ -5,6 +5,7 @@ import { AI_ENABLED } from '../../config/env.js';
 import { enqueueAiTriageJob } from '../../queues/ai-triage.queue.js';
 import {
   createTicket as createTicketRepo,
+  failTicketAiTriage,
   getCustomerTickets as getCustomerTicketsRepo,
   findTicketById,
   getTicketQueue as getTicketQueueRepo,
@@ -16,6 +17,48 @@ import {
   getAssignedTickets as getAssignedTicketsRepo,
 } from './tickets.repository.js';
 
+const AI_QUEUE_UNAVAILABLE_MESSAGE =
+  'AI triage is temporarily unavailable. The ticket is ready for an agent.';
+
+async function makeTicketAvailableAfterAiQueueFailure(ticketId: string) {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const ticket = await failTicketAiTriage(
+      ticketId,
+      AI_QUEUE_UNAVAILABLE_MESSAGE,
+      client,
+    );
+
+    if (ticket) {
+      await insertTicketStatusHistory(
+        ticketId,
+        null,
+        'triaging',
+        'open',
+        client,
+      );
+    }
+
+    await client.query('COMMIT');
+    return ticket;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error(
+        'Failed to roll back the AI queue failure fallback:',
+        rollbackError,
+      );
+    }
+
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function createTicket(
   ticketInput: CreateTicketInput,
   customerId: string,
@@ -24,7 +67,7 @@ export async function createTicket(
   const initialStatus = aiEnabled ? 'triaging' : 'open';
   const initialAiStatus = aiEnabled ? 'queued' : 'disabled';
 
-  const ticket = await createTicketRepo(
+  let ticket = await createTicketRepo(
     ticketInput,
     customerId,
     initialStatus,
@@ -42,10 +85,25 @@ export async function createTicket(
   if (aiEnabled) {
     try {
       await enqueueAiTriageJob(String(ticket.id));
-    } catch {
+    } catch (error) {
       console.error(
-        `Unable to enqueue AI triage for ticket ${ticket.id}; queued-ticket recovery will retry.`,
+        `Unable to enqueue AI triage for ticket ${ticket.id}.`,
+        error,
       );
+
+      try {
+        const fallbackTicket = await makeTicketAvailableAfterAiQueueFailure(
+          String(ticket.id),
+        );
+        if (fallbackTicket) {
+          ticket = fallbackTicket;
+        }
+      } catch (fallbackError) {
+        console.error(
+          `Unable to make ticket ${ticket.id} available after AI queue failure.`,
+          fallbackError,
+        );
+      }
     }
   }
 

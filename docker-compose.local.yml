@@ -1,0 +1,6 @@
+services:
+  migrate:
+    command: npm run setup:local
+    environment:
+      NODE_ENV: development
+      DEMO_ACCOUNT_PASSWORD: DemoPassword123!
